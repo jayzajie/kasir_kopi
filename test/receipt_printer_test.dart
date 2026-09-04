@@ -19,4 +19,16 @@ void main() {
     expect(text, contains('TOTAL'));
     expect(bytes.sublist(bytes.length - 6), [0x1b, 0x64, 4, 0x1d, 0x56, 1]);
   });
+
+  test('receipt printing builds a PDF document', () async {
+    final bytes = await const ReceiptPrinter().buildPdf(
+      transactionNumber: 'TRX-002',
+      paymentMethod: 'QRIS',
+      customerName: 'Sari',
+      transactionTime: DateTime(2026, 8, 27, 14, 30),
+      items: [CartItem(Product('Kopi Susu', 24000, 'Kopi'))],
+    );
+
+    expect(String.fromCharCodes(bytes.take(4)), '%PDF');
+  });
 }

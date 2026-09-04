@@ -39,6 +39,38 @@ class ReceiptPrinter {
       return;
     }
 
+    const page = PdfPageFormat.roll80;
+    Future<Uint8List> onLayout(PdfPageFormat _) => buildPdf(
+      transactionNumber: transactionNumber,
+      paymentMethod: paymentMethod,
+      customerName: customerName,
+      transactionTime: transactionTime,
+      items: items,
+    );
+    if (selected != null) {
+      await Printing.directPrintPdf(
+        printer: selected,
+        name: 'Struk $transactionNumber',
+        format: page,
+        usePrinterSettings: true,
+        onLayout: onLayout,
+      );
+    } else {
+      await Printing.layoutPdf(
+        name: 'Struk $transactionNumber',
+        format: page,
+        onLayout: onLayout,
+      );
+    }
+  }
+
+  Future<Uint8List> buildPdf({
+    required String transactionNumber,
+    required String paymentMethod,
+    required String customerName,
+    required DateTime transactionTime,
+    required List<CartItem> items,
+  }) async {
     final total = items.fold<int>(0, (sum, item) => sum + item.total);
     const page = PdfPageFormat.roll80;
     final date = _dateTime(transactionTime);
@@ -224,22 +256,7 @@ class ReceiptPrinter {
         ),
       );
 
-    Future<Uint8List> onLayout(PdfPageFormat _) => document.save();
-    if (selected != null) {
-      await Printing.directPrintPdf(
-        printer: selected,
-        name: 'Struk $transactionNumber',
-        format: page,
-        usePrinterSettings: true,
-        onLayout: onLayout,
-      );
-    } else {
-      await Printing.layoutPdf(
-        name: 'Struk $transactionNumber',
-        format: page,
-        onLayout: onLayout,
-      );
-    }
+    return document.save();
   }
 
   String _dateTime(DateTime value) {

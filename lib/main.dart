@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:printing/printing.dart';
 
 import 'controllers/pos_controller.dart';
+import 'accounting_pages.dart';
 import 'core/currency.dart';
 import 'data/app_database.dart';
 import 'models/cart_item.dart';
@@ -20,6 +22,31 @@ Future<void> main() async {
 const brown = Color(0xff4b2a17);
 const cream = Color(0xfffffbf5);
 String rp(num n) => rupiah(n);
+
+class RupiahInputFormatter extends TextInputFormatter {
+  const RupiahInputFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return const TextEditingValue();
+    final value = int.tryParse(digits);
+    if (value == null) return oldValue;
+    final formatted = rupiah(value).replaceFirst('Rp ', '');
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
+int parseRupiah(String value) => int.parse(value.replaceAll(RegExp(r'\D'), ''));
+
+String formatRupiahInput(int? value) =>
+    value == null ? '' : rupiah(value).replaceFirst('Rp ', '');
 
 class KopiKitaApp extends StatelessWidget {
   const KopiKitaApp({super.key, required this.database});
@@ -182,16 +209,9 @@ class PosShellState extends State<PosShell> {
         await controller.advanceOrder(i);
         if (mounted) setState(() {});
       }),
-      Inventory(stock, (k) async {
-        await controller.restock(k);
-        if (mounted) setState(() {});
-      }),
+      InventoryPage(controller, key: ValueKey(controller.stock.hashCode)),
       More(
-        products,
-        (product, available) async {
-          await controller.setAvailability(product, available);
-          if (mounted) setState(() {});
-        },
+        controller,
         () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => ReportsPage(controller)),
@@ -275,6 +295,36 @@ class Header extends StatelessWidget {
   );
 }
 
+class ProductImage extends StatelessWidget {
+  const ProductImage(this.product, {super.key, this.width, this.height});
+  final Product product;
+  final double? width, height;
+
+  @override
+  Widget build(BuildContext context) {
+    if (product.image != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.memory(
+          product.image!,
+          width: width,
+          height: height,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => const Icon(Icons.broken_image_outlined),
+        ),
+      );
+    }
+    if (product.category == 'Kopi') {
+      return Image.asset('assets/coffee.png', width: width, height: height);
+    }
+    return Icon(
+      product.category == 'Makanan' ? Icons.bakery_dining : Icons.local_drink,
+      size: width ?? height ?? 48,
+      color: const Color(0xffb78d69),
+    );
+  }
+}
+
 class Metric extends StatelessWidget {
   const Metric(this.label, this.value, this.icon, {super.key});
   final String label, value;
@@ -344,11 +394,15 @@ class Dashboard extends StatelessWidget {
               Icons.shopping_cart_outlined,
             ),
             Metric(
-              'Laba Estimasi',
+              'Laba Bersih Est.',
               rp(controller.todayProfit),
               Icons.show_chart,
             ),
-            const Metric('Pengeluaran', 'Rp 0', Icons.wallet_outlined),
+            Metric(
+              'Pengeluaran',
+              rp(controller.todayExpense),
+              Icons.wallet_outlined,
+            ),
           ],
         ),
       ),
@@ -480,16 +534,23 @@ class TopAndStock extends StatelessWidget {
                   'Stok Menipis',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                ...controller.stock.entries
-                    .where((e) => e.value < 12)
+                if (controller.inventoryItems.every(
+                  (item) => item.minimum == 0 || item.quantity > item.minimum,
+                ))
+                  const ListTile(title: Text('Semua stok aman')),
+                ...controller.inventoryItems
+                    .where(
+                      (item) =>
+                          item.minimum > 0 && item.quantity <= item.minimum,
+                    )
                     .map(
-                      (e) => ListTile(
+                      (item) => ListTile(
                         dense: true,
                         leading: const Icon(Icons.inventory_2_outlined),
-                        title: Text(e.key),
+                        title: Text(item.name),
                         trailing: Text(
-                          e.value.toStringAsFixed(1),
-                          style: TextStyle(color: Colors.red),
+                          '${item.quantity.toStringAsFixed(1)} ${item.unit}',
+                          style: const TextStyle(color: Colors.red),
                         ),
                       ),
                     ),
@@ -576,65 +637,67 @@ class _CashierState extends State<Cashier> {
           ),
         ),
         Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: MediaQuery.sizeOf(context).width > 700 ? 3 : 2,
-              childAspectRatio: .76,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-            ),
-            itemCount: shown.length,
-            itemBuilder: (_, i) {
-              final p = shown[i];
-              return Card(
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(18),
-                  onTap: () => widget.onAdd(p),
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Center(
-                            child: p.category == 'Kopi'
-                                ? Image.asset('assets/coffee.png')
-                                : Icon(
-                                    p.category == 'Makanan'
-                                        ? Icons.bakery_dining
-                                        : Icons.local_drink,
-                                    size: 72,
-                                    color: const Color(0xffb78d69),
-                                  ),
-                          ),
-                        ),
-                        Text(
-                          p.name,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            Expanded(child: Text(rp(p.price))),
-                            CircleAvatar(
-                              backgroundColor: brown,
-                              foregroundColor: Colors.white,
-                              child: Icon(
-                                p.available ? Icons.add : Icons.close,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+          child: shown.isEmpty
+              ? Center(
+                  child: Text(
+                    widget.products.isEmpty
+                        ? 'Belum ada menu. Tambahkan dari halaman Lainnya.'
+                        : 'Menu tidak ditemukan.',
                   ),
+                )
+              : GridView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: MediaQuery.sizeOf(context).width > 700
+                        ? 3
+                        : 2,
+                    childAspectRatio: .76,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                  ),
+                  itemCount: shown.length,
+                  itemBuilder: (_, i) {
+                    final p = shown[i];
+                    return Card(
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(18),
+                        onTap: () => widget.onAdd(p),
+                        child: Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Center(
+                                  child: ProductImage(p, width: 90, height: 90),
+                                ),
+                              ),
+                              Text(
+                                p.name,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              Row(
+                                children: [
+                                  Expanded(child: Text(rp(p.price))),
+                                  CircleAvatar(
+                                    backgroundColor: brown,
+                                    foregroundColor: Colors.white,
+                                    child: Icon(
+                                      p.available ? Icons.add : Icons.close,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
         ),
         if (count > 0)
           Container(
@@ -701,20 +764,42 @@ class CustomizePage extends StatefulWidget {
 }
 
 class _CustomizePageState extends State<CustomizePage> {
-  int qty = 1, shots = 0, sugar = 50;
-  String temp = 'Dingin',
-      size = 'Medium',
-      syrup = 'Caramel',
-      topping = 'Tidak ada';
+  int qty = 1;
+  String temp = 'Dingin', size = 'Medium', syrup = 'Caramel';
+  late String ice, sugar;
+  late final List<int> addonQuantities;
   final note = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    ice = widget.product.iceOption;
+    sugar = widget.product.sugarOption;
+    addonQuantities = List.filled(widget.product.addons.length, 0);
+  }
+
   int get extra =>
-      shots * 5000 +
       (size == 'Large'
           ? 4000
           : size == 'Small'
           ? -2000
           : 0) +
-      (topping == 'Whipped Cream' ? 5000 : 0);
+      widget.product.addons.indexed.fold(
+        0,
+        (sum, entry) => sum + addonQuantities[entry.$1] * entry.$2.price,
+      );
+
+  String get selectedAddons => widget.product.addons.indexed
+      .where((entry) => addonQuantities[entry.$1] > 0)
+      .map((entry) => '${addonQuantities[entry.$1]} ${entry.$2.name}')
+      .join(' • ');
+
+  @override
+  void dispose() {
+    note.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Custom Kopi')),
@@ -729,7 +814,7 @@ class _CustomizePageState extends State<CustomizePage> {
                 SizedBox(
                   width: 120,
                   height: 150,
-                  child: Image.asset('assets/coffee.png'),
+                  child: ProductImage(widget.product, width: 120, height: 150),
                 ),
                 Expanded(
                   child: Column(
@@ -770,42 +855,36 @@ class _CustomizePageState extends State<CustomizePage> {
           size,
           (v) => setState(() => size = v),
         ),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Tingkat Manis: $sugar%',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Slider(
-                  value: sugar.toDouble(),
-                  max: 100,
-                  divisions: 4,
-                  onChanged: (v) => setState(() => sugar = v.round()),
-                ),
-              ],
-            ),
-          ),
+        Options(
+          'Es',
+          ['Normal Ice', 'Less Ice'],
+          ice,
+          (value) => setState(() => ice = value),
         ),
-        Card(
-          child: ListTile(
-            title: const Text('Extra Shot'),
-            subtitle: const Text('+ Rp 5.000 / shot'),
-            trailing: Qty(shots, (v) => setState(() => shots = v), zero: true),
-          ),
+        Options(
+          'Gula',
+          ['Normal Sugar', 'Less Sugar'],
+          sugar,
+          (value) => setState(() => sugar = value),
         ),
         Pick('Syrup', syrup, [
           'Caramel',
           'Vanilla',
           'Gula Aren',
         ], (v) => setState(() => syrup = v)),
-        Pick('Topping / Add-on', topping, [
-          'Tidak ada',
-          'Whipped Cream',
-        ], (v) => setState(() => topping = v)),
+        ...widget.product.addons.indexed.map(
+          (entry) => Card(
+            child: ListTile(
+              title: Text(entry.$2.name),
+              subtitle: Text('+ ${rp(entry.$2.price)}'),
+              trailing: Qty(
+                addonQuantities[entry.$1],
+                (value) => setState(() => addonQuantities[entry.$1] = value),
+                zero: true,
+              ),
+            ),
+          ),
+        ),
         TextField(
           controller: note,
           maxLength: 100,
@@ -824,7 +903,7 @@ class _CustomizePageState extends State<CustomizePage> {
               extra: extra,
               note: note.text,
               options:
-                  '$temp • $size • Gula $sugar% • $syrup${shots > 0 ? ' • $shots shot' : ''}${topping != 'Tidak ada' ? ' • $topping' : ''}',
+                  '$temp • $size • $ice • $sugar • $syrup${selectedAddons.isEmpty ? '' : ' • $selectedAddons'}',
             ),
           ),
           icon: const Icon(Icons.shopping_cart_outlined),
@@ -932,9 +1011,11 @@ class _CartPageState extends State<CartPage> {
                           SizedBox(
                             width: 68,
                             height: 82,
-                            child: e.product.category == 'Kopi'
-                                ? Image.asset('assets/coffee.png')
-                                : const Icon(Icons.bakery_dining, size: 48),
+                            child: ProductImage(
+                              e.product,
+                              width: 68,
+                              height: 82,
+                            ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
@@ -1196,6 +1277,7 @@ class _PaymentPageState extends State<PaymentPage> {
                 ? null
                 : () async {
                     await widget.shell.paid(method);
+                    await widget.shell.printReceipt();
                     if (context.mounted) {
                       Navigator.pushAndRemoveUntil(
                         context,
@@ -1298,11 +1380,6 @@ class SuccessPage extends StatelessWidget {
                   icon: const Icon(Icons.print),
                   label: const Text('Cetak Struk'),
                 ),
-                OutlinedButton.icon(
-                  onPressed: shell.printReceipt,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Reprint'),
-                ),
                 FilledButton.icon(
                   onPressed: () => shell.newTransaction(context),
                   icon: const Icon(Icons.add_circle_outline),
@@ -1399,94 +1476,369 @@ class Orders extends StatelessWidget {
   }
 }
 
-class Inventory extends StatelessWidget {
-  const Inventory(this.stock, this.restock, {super.key});
-  final Map<String, double> stock;
-  final ValueChanged<String> restock;
+class _ProductDialog extends StatefulWidget {
+  const _ProductDialog(this.product);
+  final Product? product;
+
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      const Header(
-        'Inventory',
-        'Kelola stok bahan baku dan perlengkapan untuk operasional harian.',
+  State<_ProductDialog> createState() => _ProductDialogState();
+}
+
+class _AddonInput {
+  _AddonInput({String name = '', int? price})
+    : name = TextEditingController(text: name),
+      price = TextEditingController(text: formatRupiahInput(price));
+
+  factory _AddonInput.fromProduct(ProductAddon addon) =>
+      _AddonInput(name: addon.name, price: addon.price);
+
+  final TextEditingController name, price;
+
+  void dispose() {
+    name.dispose();
+    price.dispose();
+  }
+}
+
+class _ProductDialogState extends State<_ProductDialog> {
+  final formKey = GlobalKey<FormState>();
+  late final TextEditingController name;
+  late final TextEditingController price;
+  late final TextEditingController cost;
+  final addons = <_AddonInput>[];
+  late String category, iceOption, sugarOption;
+  Uint8List? image;
+
+  @override
+  void initState() {
+    super.initState();
+    final product = widget.product;
+    name = TextEditingController(text: product?.name);
+    price = TextEditingController(text: formatRupiahInput(product?.price));
+    cost = TextEditingController(text: formatRupiahInput(product?.cost));
+    category = product?.category ?? 'Kopi';
+    iceOption = product?.iceOption ?? 'Normal Ice';
+    sugarOption = product?.sugarOption ?? 'Normal Sugar';
+    image = product?.image;
+    addons.addAll(product?.addons.map(_AddonInput.fromProduct) ?? []);
+  }
+
+  @override
+  void dispose() {
+    name.dispose();
+    price.dispose();
+    cost.dispose();
+    for (final addon in addons) {
+      addon.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> chooseImage() async {
+    try {
+      const images = XTypeGroup(
+        label: 'Gambar',
+        extensions: ['jpg', 'jpeg', 'png', 'webp'],
+        mimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+        uniformTypeIdentifiers: [
+          'public.jpeg',
+          'public.png',
+          'org.webmproject.webp',
+        ],
+      );
+      final file = await openFile(acceptedTypeGroups: [images]);
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (bytes.lengthInBytes > 5 * 1024 * 1024) {
+        throw Exception('Ukuran foto maksimal 5 MB.');
+      }
+      if (mounted) setState(() => image = bytes);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Foto gagal dipilih: $error')));
+      }
+    }
+  }
+
+  void addAddon() => setState(() => addons.add(_AddonInput()));
+
+  void removeAddon(int index) {
+    final removed = addons.removeAt(index);
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) => removed.dispose());
+  }
+
+  String? moneyValidator(String? value) {
+    final digits = value?.replaceAll(RegExp(r'\D'), '') ?? '';
+    return digits.isEmpty ? 'Harga wajib diisi' : null;
+  }
+
+  void save() {
+    if (!formKey.currentState!.validate()) return;
+    final existing = widget.product;
+    Navigator.pop(
+      context,
+      Product(
+        name.text.trim(),
+        parseRupiah(price.text),
+        category,
+        id: existing?.id ?? 0,
+        cost: parseRupiah(cost.text),
+        available: existing?.available ?? true,
+        iceOption: iceOption,
+        sugarOption: sugarOption,
+        image: image,
+        addons: category == 'Kopi'
+            ? addons
+                  .map(
+                    (addon) => ProductAddon(
+                      addon.name.text.trim(),
+                      parseRupiah(addon.price.text),
+                    ),
+                  )
+                  .toList()
+            : const [],
       ),
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Row(
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: Text(widget.product == null ? 'Tambah Menu' : 'Edit Menu'),
+    content: Form(
+      key: formKey,
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: Metric(
-                'Total Item',
-                '${stock.length}',
-                Icons.inventory_2_outlined,
-              ),
+            TextFormField(
+              controller: name,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(labelText: 'Nama menu'),
+              validator: (value) => value == null || value.trim().isEmpty
+                  ? 'Nama menu wajib diisi'
+                  : null,
             ),
-            Expanded(
-              child: Metric(
-                'Stok Aman',
-                '${stock.values.where((value) => value >= 12).length}',
-                Icons.check,
-              ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: category,
+              decoration: const InputDecoration(labelText: 'Kategori'),
+              items: const ['Kopi', 'Non Kopi', 'Makanan', 'Add-on']
+                  .map(
+                    (value) =>
+                        DropdownMenuItem(value: value, child: Text(value)),
+                  )
+                  .toList(),
+              onChanged: (value) => setState(() => category = value!),
             ),
-            Expanded(
-              child: Metric(
-                'Stok Rendah',
-                '${stock.values.where((value) => value < 12).length}',
-                Icons.warning_amber,
+            const SizedBox(height: 12),
+            _moneyField(price, 'Harga jual'),
+            const SizedBox(height: 12),
+            _moneyField(cost, 'HPP / modal'),
+            const SizedBox(height: 12),
+            if (image != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Image.memory(
+                  image!,
+                  height: 130,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, _, _) => const SizedBox(
+                    height: 80,
+                    child: Center(child: Text('Foto tidak dapat dibuka')),
+                  ),
+                ),
               ),
+            Wrap(
+              spacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: chooseImage,
+                  icon: const Icon(Icons.photo_library_outlined),
+                  label: Text(image == null ? 'Pilih Foto' : 'Ubah Foto'),
+                ),
+                if (image != null)
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => image = null),
+                    icon: const Icon(Icons.delete_outline),
+                    label: const Text('Hapus Foto'),
+                  ),
+              ],
             ),
+            if (category == 'Kopi') ...[
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: iceOption,
+                decoration: const InputDecoration(labelText: 'Pilihan es awal'),
+                items: const ['Normal Ice', 'Less Ice']
+                    .map(
+                      (value) =>
+                          DropdownMenuItem(value: value, child: Text(value)),
+                    )
+                    .toList(),
+                onChanged: (value) => setState(() => iceOption = value!),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                initialValue: sugarOption,
+                decoration: const InputDecoration(
+                  labelText: 'Pilihan gula awal',
+                ),
+                items: const ['Normal Sugar', 'Less Sugar']
+                    .map(
+                      (value) =>
+                          DropdownMenuItem(value: value, child: Text(value)),
+                    )
+                    .toList(),
+                onChanged: (value) => setState(() => sugarOption = value!),
+              ),
+              const SizedBox(height: 12),
+              ...addons.indexed.map(
+                (entry) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: entry.$2.name,
+                          textCapitalization: TextCapitalization.words,
+                          decoration: const InputDecoration(
+                            labelText: 'Nama add-on',
+                          ),
+                          validator: (value) =>
+                              value == null || value.trim().isEmpty
+                              ? 'Wajib diisi'
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: _moneyField(entry.$2.price, 'Harga add-on'),
+                      ),
+                      IconButton(
+                        onPressed: () => removeAddon(entry.$1),
+                        tooltip: 'Hapus add-on',
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: OutlinedButton.icon(
+                  onPressed: addAddon,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Tambah Add-on'),
+                ),
+              ),
+            ],
           ],
         ),
       ),
-      Expanded(
-        child: ListView(
-          padding: const EdgeInsets.all(14),
-          children: stock.entries.map((e) {
-            final low = e.value < 12;
-            return Card(
-              child: ListTile(
-                contentPadding: const EdgeInsets.all(10),
-                leading: const Icon(
-                  Icons.inventory_2_outlined,
-                  size: 36,
-                  color: brown,
-                ),
-                title: Text(
-                  e.key,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(
-                  'Stok ${e.value.toStringAsFixed(1)} • ${low ? 'Rendah' : 'Aman'}',
-                  style: TextStyle(color: low ? Colors.red : Colors.green),
-                ),
-                trailing: OutlinedButton(
-                  onPressed: () => restock(e.key),
-                  child: const Text('Stok Masuk'),
-                ),
-              ),
-            );
-          }).toList(),
-        ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Batal'),
       ),
+      FilledButton(onPressed: save, child: const Text('Simpan')),
     ],
   );
+
+  TextFormField _moneyField(TextEditingController controller, String label) =>
+      TextFormField(
+        controller: controller,
+        keyboardType: TextInputType.number,
+        inputFormatters: [
+          FilteringTextInputFormatter.digitsOnly,
+          RupiahInputFormatter(),
+        ],
+        decoration: InputDecoration(labelText: label, prefixText: 'Rp '),
+        validator: moneyValidator,
+      );
 }
 
 class More extends StatefulWidget {
-  const More(
-    this.products,
-    this.availabilityChanged,
-    this.reports, {
-    super.key,
-  });
-  final List<Product> products;
-  final Future<void> Function(Product, bool) availabilityChanged;
+  const More(this.controller, this.reports, {super.key});
+  final PosController controller;
   final VoidCallback reports;
   @override
   State<More> createState() => _MoreState();
 }
 
 class _MoreState extends State<More> {
+  Future<void> editProduct([Product? existing]) async {
+    final product = await showDialog<Product>(
+      context: context,
+      builder: (_) => _ProductDialog(existing),
+    );
+    if (product == null) return;
+    if (existing == null) {
+      await widget.controller.addProduct(product);
+    } else {
+      await widget.controller.updateProduct(product);
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> deleteProduct(Product product) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hapus menu?'),
+        content: Text('${product.name} akan dihapus dari daftar menu.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await widget.controller.deleteProduct(product);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> resetDatabase() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset database?'),
+        content: const Text(
+          'Semua menu dan transaksi akan dihapus permanen. Stok akan dikembalikan ke kondisi awal.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    await widget.controller.resetDatabase();
+    if (mounted) {
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Database berhasil direset.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) => ListView(
     children: [
@@ -1495,30 +1847,55 @@ class _MoreState extends State<More> {
         'Kelola menu, harga, ketersediaan, dan resep setiap produk.',
       ),
       Padding(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+        child: FilledButton.icon(
+          onPressed: editProduct,
+          icon: const Icon(Icons.add),
+          label: const Text('Tambah Menu'),
+        ),
+      ),
+      Padding(
         padding: const EdgeInsets.all(14),
         child: Card(
           child: Column(
-            children: widget.products
-                .map(
-                  (p) => ListTile(
-                    leading: p.category == 'Kopi'
-                        ? Image.asset('assets/coffee.png', width: 43)
-                        : const Icon(Icons.bakery_dining),
-                    title: Text(
-                      p.name,
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text('${p.category} • ${rp(p.price)}'),
-                    trailing: Switch(
-                      value: p.available,
-                      onChanged: (v) async {
-                        await widget.availabilityChanged(p, v);
-                        if (mounted) setState(() {});
-                      },
-                    ),
+            children: [
+              if (widget.controller.products.isEmpty)
+                const ListTile(
+                  leading: Icon(Icons.restaurant_menu),
+                  title: Text('Belum ada menu'),
+                  subtitle: Text('Tambahkan menu untuk mulai berjualan.'),
+                ),
+              ...widget.controller.products.map(
+                (p) => ListTile(
+                  leading: ProductImage(p, width: 43, height: 43),
+                  title: Text(
+                    p.name,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                )
-                .toList(),
+                  subtitle: Text('${p.category} • ${rp(p.price)}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Switch(
+                        value: p.available,
+                        onChanged: (value) async {
+                          await widget.controller.setAvailability(p, value);
+                          if (mounted) setState(() {});
+                        },
+                      ),
+                      PopupMenuButton<String>(
+                        onSelected: (value) =>
+                            value == 'edit' ? editProduct(p) : deleteProduct(p),
+                        itemBuilder: (_) => const [
+                          PopupMenuItem(value: 'edit', child: Text('Edit')),
+                          PopupMenuItem(value: 'delete', child: Text('Hapus')),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1534,21 +1911,42 @@ class _MoreState extends State<More> {
         padding: EdgeInsets.all(14),
         child: Card(
           child: Column(
-            children: const [
+            children: [
               ListTile(
-                leading: Icon(Icons.science_outlined),
-                title: Text('Resep & HPP'),
-                subtitle: Text('Es Latte • HPP Rp 6.780 • Margin 75,8%'),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => RecipeHppPage(widget.controller),
+                  ),
+                ).then((_) => setState(() {})),
+                leading: const Icon(Icons.science_outlined),
+                title: const Text('Resep & HPP'),
+                subtitle: const Text('Kelola biaya dan margin produk'),
+                trailing: const Icon(Icons.chevron_right),
               ),
               ListTile(
-                leading: Icon(Icons.payments_outlined),
-                title: Text('Pengeluaran'),
-                subtitle: Text('Bahan, listrik, dan gas'),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ExpensesPage(widget.controller),
+                  ),
+                ).then((_) => setState(() {})),
+                leading: const Icon(Icons.payments_outlined),
+                title: const Text('Pengeluaran'),
+                subtitle: const Text('Bahan, listrik, dan gas'),
+                trailing: const Icon(Icons.chevron_right),
               ),
               ListTile(
-                leading: Icon(Icons.history),
-                title: Text('Riwayat Transaksi'),
-                subtitle: Text('Semua transaksi dan detail item'),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => TransactionHistoryPage(widget.controller),
+                  ),
+                ),
+                leading: const Icon(Icons.history),
+                title: const Text('Riwayat Transaksi'),
+                subtitle: const Text('Semua transaksi dan detail item'),
+                trailing: const Icon(Icons.chevron_right),
               ),
             ],
           ),
@@ -1565,6 +1963,18 @@ class _MoreState extends State<More> {
             leading: const Icon(Icons.print_outlined),
             title: const Text('Pengaturan Printer'),
             subtitle: const Text('Deteksi, pilih, dan pairing USB/Bluetooth'),
+            trailing: const Icon(Icons.chevron_right),
+          ),
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+        child: Card(
+          child: ListTile(
+            onTap: resetDatabase,
+            leading: const Icon(Icons.delete_forever, color: Colors.red),
+            title: const Text('Reset Database'),
+            subtitle: const Text('Hapus seluruh data SQLite aplikasi'),
             trailing: const Icon(Icons.chevron_right),
           ),
         ),
@@ -1785,8 +2195,12 @@ class ReportsPage extends StatelessWidget {
                 Icons.show_chart,
               ),
             ),
-            const Expanded(
-              child: Metric('Pengeluaran', 'Rp 0', Icons.wallet_outlined),
+            Expanded(
+              child: Metric(
+                'Pengeluaran',
+                rp(controller.todayExpense),
+                Icons.wallet_outlined,
+              ),
             ),
           ],
         ),
