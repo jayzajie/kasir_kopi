@@ -10,35 +10,44 @@
 2. [Kasir (Point of Sale)](#2-kasir-point-of-sale)
 3. [Keranjang & Pembayaran](#3-keranjang--pembayaran)
 4. [Antrian Pesanan](#4-antrian-pesanan)
-5. [Manajemen Stok](#5-manajemen-stok)
-6. [Resep & HPP](#6-resep--hpp)
-7. [Pengeluaran](#7-pengeluaran)
+5. [Manajemen Menu](#5-manajemen-menu)
+6. [Riwayat Transaksi](#6-riwayat-transaksi)
+7. [Export Excel](#7-export-excel)
 8. [Laporan & Analitik](#8-laporan--analitik)
-9. [Riwayat Transaksi](#9-riwayat-transaksi)
-10. [Manajemen Menu](#10-manajemen-menu)
-11. [Printer & Struk](#11-printer--struk)
-12. [Reset Database](#12-reset-database)
+9. [Printer & Struk](#9-printer--struk)
+10. [Reset Database](#10-reset-database)
+
+---
+
+## Navigasi Utama
+
+Aplikasi memiliki **4 tab** di bagian bawah layar:
+
+| Tab | Ikon | Fungsi |
+|---|---|---|
+| **Dashboard** | 🏠 | Ringkasan performa hari ini |
+| **Kasir** | 🛒 | Buka transaksi baru |
+| **Pesanan** | 🧾 | Antrian & status pesanan |
+| **Lainnya** | ⋯ | Menu, riwayat, export, laporan, printer |
 
 ---
 
 ## 1. Dashboard
 
-Halaman pertama yang muncul saat aplikasi dibuka. Menampilkan ringkasan performa bisnis **hari ini secara real-time**.
+Halaman pertama yang muncul saat aplikasi dibuka. Menampilkan ringkasan bisnis **hari ini secara real-time**.
 
 ### Metrik Utama
 
 | Kartu | Penjelasan |
 |---|---|
-| **Omzet Hari Ini** | Total penjualan (sebelum dikurangi biaya) |
+| **Omzet Hari Ini** | Total penjualan hari ini |
 | **Transaksi Hari Ini** | Jumlah order yang sudah dibayar |
-| **Laba Bersih Est.** | Omzet dikurangi HPP produk dan pengeluaran operasional |
-| **Pengeluaran** | Total biaya yang sudah dicatat hari ini |
 
-### Grafik & Widget Tambahan
+### Widget Tambahan
 
 - **Grafik Omzet 7 Hari** — bar chart tren penjualan dari H-6 hingga hari ini
 - **Produk Terlaris** — top 5 menu berdasarkan total kuantitas terjual
-- **Stok Menipis** — daftar bahan baku yang sudah menyentuh atau melewati batas minimum
+- Tombol **Lihat Laporan & Analitik** untuk masuk ke halaman laporan
 
 ---
 
@@ -67,7 +76,7 @@ Khusus produk berkategori **Kopi**, muncul halaman kustomisasi sebelum masuk ke 
 | Add-on | Sesuai yang diatur per produk (misal: Extra Shot, Extra Susu) |
 | Catatan | Teks bebas, maksimal 100 karakter |
 
-> Setiap pilihan size dan add-on akan otomatis mengubah harga akhir item.
+> Pilihan size dan add-on otomatis mengubah harga akhir item.
 
 ---
 
@@ -85,21 +94,25 @@ Pilih metode pembayaran:
 
 | Metode | Detail |
 |---|---|
-| **Tunai** | Input nominal diterima → kembalian dihitung otomatis. Ada tombol cepat: Rp 50.000 / 100.000 / 150.000 / 200.000 |
+| **Tunai** | Input nominal diterima → kembalian dihitung otomatis. Tombol cepat: Rp 50.000 / 100.000 / 150.000 / 200.000 |
 | **QRIS** | Konfirmasi langsung |
-| **Transfer** | Konfirmasi langsung |
 
-Setelah "Bayar Sekarang":
+Setelah **Bayar Sekarang**:
 - Transaksi tersimpan ke database
-- **Stok bahan baku terpotong otomatis** sesuai resep produk
 - Struk dicetak otomatis (jika printer terhubung)
-- Nomor transaksi unik dibuat otomatis (format: `TRX-{timestamp}`)
+- Nomor transaksi unik dibuat otomatis (format: `TRX-{nomor order}{DDMMYYHHmm}`)
+
+### Halaman Sukses
+
+- Ringkasan transaksi: nomor, metode, nama pembeli, total
+- Tombol **Cetak Struk** untuk cetak ulang
+- Tombol **Transaksi Baru** untuk langsung kembali ke kasir
 
 ---
 
 ## 4. Antrian Pesanan
 
-Halaman untuk memantau dan mengupdate status pesanan, berguna jika kasir dan barista terpisah.
+Halaman untuk memantau dan mengupdate status pesanan — berguna jika kasir dan barista terpisah.
 
 ### Alur Status Pesanan
 
@@ -107,176 +120,112 @@ Halaman untuk memantau dan mengupdate status pesanan, berguna jika kasir dan bar
 Baru  →  Dibuat  →  Selesai  →  Diambil
 ```
 
-- Tap tombol di setiap kartu pesanan untuk menggeser statusnya
-- Menampilkan 30 transaksi terakhir
-- Setiap kartu menampilkan: nomor order, nama pelanggan, metode bayar, dan total
+- Tap tombol di setiap kartu untuk menggeser status ke tahap berikutnya
+- Menampilkan 100 transaksi terakhir
+- Setiap kartu menampilkan: nomor order, nama pelanggan, metode bayar, total, dan status saat ini
 
 ---
 
-## 5. Manajemen Stok
+## 5. Manajemen Menu
 
-Kelola bahan baku secara lengkap dengan audit trail.
+Akses dari tab **Lainnya**, di bagian atas halaman.
 
-### Ringkasan di Bagian Atas
+### Tambah Menu Baru
 
-| Metrik | Penjelasan |
+Isi form:
+- Nama dan kategori (Kopi / Non Kopi / Makanan / Add-on)
+- Harga jual
+- Foto produk (dari galeri/file, maks. 5 MB)
+- Default es dan gula *(khusus kategori Kopi)*
+- **Add-on** eksklusif produk (nama + harga, bisa lebih dari satu) *(khusus kategori Kopi)*
+
+### Kelola Menu yang Ada
+
+| Aksi | Cara |
 |---|---|
-| **Nilai Stok** | Total nilai semua bahan (kuantitas × harga satuan) |
-| **Stok Rendah** | Jumlah bahan yang sudah di bawah batas minimum |
-| **Bahan Habis** | Jumlah bahan yang stoknya nol |
+| **Toggle Tersedia** | Switch on/off di daftar menu — nonaktifkan tanpa hapus |
+| **Edit** | Popup menu → Edit |
+| **Hapus** | Popup menu → Hapus, dengan konfirmasi |
 
-### Fitur Manajemen Stok
+---
 
-| Fitur | Fungsi |
+## 6. Riwayat Transaksi
+
+Akses dari tab **Lainnya → Riwayat Transaksi**.
+
+- Menampilkan 100 transaksi terakhir dalam daftar yang bisa di-expand
+- Setiap transaksi menampilkan: nomor, nama pelanggan, metode bayar, tanggal/jam, total
+- Expand untuk melihat **detail item** per transaksi (nama produk, kustomisasi, qty, subtotal)
+- Tombol **Cetak Ulang** untuk mencetak kembali struk transaksi tersebut
+
+---
+
+## 7. Export Excel
+
+Akses dari tab **Lainnya → Export Excel**.
+
+Fitur untuk mengekspor rekap transaksi ke file `.xlsx` yang bisa dibagikan via WhatsApp, email, Google Drive, atau disimpan langsung ke perangkat.
+
+### Filter Periode
+
+Pilih salah satu dari tiga mode:
+
+| Mode | Cara Kerja |
 |---|---|
-| **Stok Masuk** | Catat pembelian bahan baru. Stok bertambah, harga beli diperbarui, pengeluaran otomatis tercatat, HPP seluruh produk yang pakai bahan ini dihitung ulang |
-| **Penyesuaian Stok** | Koreksi manual dengan alasan (Rusak/tumpah, Dipakai sendiri, Koreksi tambah, dll.) |
-| **Stok Opname** | Masukkan jumlah stok fisik sebenarnya — sistem menghitung dan mencatat selisihnya |
-| **Tambah Bahan** | Daftarkan bahan baku baru dengan satuan, harga, dan minimum stok |
+| **Mingguan** | Navigasi maju/mundur per minggu (Senin–Minggu) menggunakan tombol `‹` dan `›` |
+| **Bulanan** | Pilih bulan dan tahun dari dropdown |
+| **Rentang Bulan** | Pilih bulan awal dan bulan akhir secara terpisah — bisa lintas tahun |
 
-### Detail Per Bahan
+### Isi File Excel (3 Sheet)
 
-Tap tiap bahan untuk melihat:
-- Harga beli per kemasan dan harga satuan terhitung
-- Nilai stok bahan tersebut
-- **Riwayat 30 pergerakan stok terakhir** — jenis, alasan, tanggal, jumlah masuk/keluar (hijau/merah)
+| Sheet | Kolom |
+|---|---|
+| **Ringkasan Transaksi** | No. Transaksi · Tanggal · Jam · Nama Pelanggan · Metode Bayar · Total (Rp) · Status |
+| **Detail Item** | No. Transaksi · Tanggal · Jam · Pelanggan · Produk · Kustomisasi · Catatan · Qty · Harga Satuan · Surcharge · Subtotal |
+| **Rekap Harian** | Tanggal · Jumlah Transaksi · Total Omzet (Rp) |
 
----
+Setiap sheet dilengkapi baris **TOTAL** di bagian bawah dan header berwarna coklat.
 
-## 6. Resep & HPP
+### Cara Export
 
-Fitur untuk menghitung **Harga Pokok Penjualan (HPP)** secara otomatis berdasarkan resep tiap produk.
+1. Pilih mode periode
+2. Pilih rentang waktu yang diinginkan
+3. Tap **Export Excel**
+4. Di PC, pilih folder dan nama file. Di perangkat lain, pilih tujuan berbagi.
 
-### Cara Kerja HPP
-
-#### Langkah 1 — Input Harga Bahan Baku
-
-Masukkan data tiap bahan:
-- Nama dan satuan (gram / ml / pcs)
-- Harga beli kemasan (misal: Rp 120.000)
-- Isi kemasan (misal: 1.000 gram)
-
-Sistem otomatis menghitung **harga satuan**:
-
-```
-Harga Satuan = Harga Beli Kemasan ÷ Isi Kemasan
-
-Contoh: Rp 120.000 ÷ 1.000 gram = Rp 120 / gram
-```
-
-#### Langkah 2 — Atur Resep Per Produk
-
-Untuk setiap menu, tentukan berapa banyak tiap bahan yang dipakai dalam satu porsi.
-
-#### Langkah 3 — HPP Dihitung Otomatis
-
-```
-HPP = Σ (Pemakaian per porsi × Harga Satuan Bahan)
-```
-
-**Contoh Cappuccino:**
-
-| Bahan | Pakai | Harga Satuan | Biaya |
-|---|---|---|---|
-| Biji Kopi | 18 gram | Rp 120/gram | Rp 2.160 |
-| Susu Full Cream | 120 ml | Rp 15/ml | Rp 1.800 |
-| Cup 12oz | 1 pcs | Rp 500/pcs | Rp 500 |
-| Tutup Cup | 1 pcs | Rp 333/pcs | Rp 333 |
-| **Total HPP** | | | **Rp 4.793** |
-
-Jika harga jual Cappuccino = Rp 25.000, maka:
-- **Margin** = Rp 25.000 − Rp 4.793 = **Rp 20.207 (80,8%)**
-
-#### Update Otomatis
-
-Setiap kali harga beli bahan diperbarui atau stok masuk baru dicatat, **HPP semua produk yang menggunakan bahan tersebut langsung dihitung ulang** — tidak perlu input manual.
-
-### Tampilan Margin Per Produk
-
-- 🟢 **Hijau** — margin positif (harga jual di atas HPP)
-- 🔴 **Merah** — margin negatif (harga jual di bawah modal, rugi)
-
-### HPP Manual
-
-Jika resep belum diatur, owner bisa mengisi HPP secara manual langsung di form produk. Nilai ini akan dipakai sampai resep disimpan.
-
----
-
-## 7. Pengeluaran
-
-Catat semua biaya operasional harian.
-
-### Kategori Pengeluaran
-
-`Bahan` · `Listrik` · `Gas` · `Sewa` · `Gaji` · `Lainnya`
-
-### Penting
-
-> **Pembelian stok bahan baku otomatis masuk ke sini** sebagai kategori "Bahan". Jadi pengeluaran selalu sinkron dengan aktivitas inventaris — tidak perlu double input.
-
-Fitur:
-- Lihat total pengeluaran hari ini di bagian atas
-- Daftar semua catatan pengeluaran (terbaru di atas)
-- Hapus catatan yang salah input
+> Jika tidak ada transaksi pada periode yang dipilih, akan muncul notifikasi.
 
 ---
 
 ## 8. Laporan & Analitik
 
-Ringkasan performa bisnis dalam satu halaman.
+Akses dari tab **Dashboard → Lihat Laporan & Analitik** atau tab **Lainnya → Laporan & Analitik**.
 
-- Metrik omzet, laba, dan pengeluaran
-- Grafik omzet 7 hari terakhir
-- Daftar produk terlaris
-- Alert bahan baku menipis
-
----
-
-## 9. Riwayat Transaksi
-
-Lihat detail 30 transaksi terakhir.
-
-Setiap transaksi bisa di-expand untuk melihat:
-- Daftar item yang dipesan (nama, kustomisasi, jumlah, subtotal)
-- **Laba kotor transaksi tersebut**
-- Tombol **Cetak Ulang** untuk mencetak kembali struk
-
-> Laba kotor per item dihitung dari: `(Harga Jual + Surcharge − HPP) × Kuantitas`
-> HPP yang dipakai adalah **snapshot saat transaksi terjadi**, sehingga laporan tetap akurat meski harga bahan berubah di kemudian hari.
+- Metrik omzet dan jumlah transaksi hari ini
+- Grafik tren omzet 7 hari terakhir
+- Daftar 5 produk terlaris
 
 ---
 
-## 10. Manajemen Menu
+## 9. Printer & Struk
 
-Kelola semua produk yang tersedia di kasir.
+Akses dari tab **Lainnya → Pengaturan Printer**.
 
-### Fitur Per Produk
+### Jenis Printer yang Didukung
 
-| Fitur | Keterangan |
+| Jenis | Platform |
 |---|---|
-| **Toggle Tersedia** | Aktif/nonaktifkan produk di kasir secara instan tanpa hapus |
-| **Edit Produk** | Ubah nama, harga, kategori, HPP manual, gambar, add-on |
-| **Hapus Produk** | Menghapus produk dari daftar menu |
+| **ESC/POS Thermal (Bluetooth)** | Android |
+| **USB / Printer Sistem** | Windows & Android |
+| **PDF 80mm** | Semua platform (fallback) |
 
-### Data yang Bisa Diatur per Produk
+### Cara Hubungkan Printer
 
-- Nama dan kategori (Kopi / Non Kopi / Makanan / Add-on)
-- Harga jual
-- HPP / modal (manual, bisa diganti oleh resep)
-- Foto produk (dari galeri/file, maks. 5 MB)
-- Default es dan gula
-- **Add-on** eksklusif produk (nama + harga, bisa lebih dari satu) — khusus kategori Kopi
-
----
-
-## 11. Printer & Struk
-
-Aplikasi mendukung dua jenis printer:
-
-| Jenis | Platform | Detail |
-|---|---|---|
-| **ESC/POS Thermal (Bluetooth)** | Android | Cetak struk langsung ke printer thermal portabel |
-| **USB / Sistem** | Windows & Android | Termasuk cetak ke PDF ukuran 80mm |
+1. Tap **Pair Bluetooth** atau **Tambah USB** untuk membuka pengaturan sistem
+2. Pair printer dari pengaturan sistem perangkat
+3. Kembali ke app → tap **Deteksi Ulang** (ikon refresh)
+4. Tap nama printer untuk memilihnya sebagai printer aktif
+5. Atau gunakan **Buka Pemilih Printer Sistem** untuk memilih dari daftar sistem
 
 ### Isi Struk
 
@@ -289,11 +238,11 @@ Aplikasi mendukung dua jenis printer:
 
 ---
 
-## 12. Reset Database
+## 10. Reset Database
 
-Tersedia di menu **More → Reset Database**.
+Tersedia di tab **Lainnya → Reset Database**.
 
-> ⚠️ **Peringatan:** Tindakan ini akan menghapus **semua data** termasuk produk, transaksi, resep, pengeluaran, dan riwayat stok. Inventaris akan direset ke data awal bawaan. Tidak bisa dibatalkan.
+> ⚠️ **Peringatan:** Tindakan ini akan menghapus **semua data** termasuk produk, menu, dan seluruh riwayat transaksi. Tidak bisa dibatalkan. Akan muncul dialog konfirmasi sebelum proses berjalan.
 
 ---
 
@@ -303,9 +252,8 @@ Tersedia di menu **More → Reset Database**.
 |---|---|
 | **Platform** | Android & Windows |
 | **Database** | SQLite lokal (tidak butuh internet) |
-| **Keamanan data** | HPP di-snapshot saat transaksi, laporan historis tetap akurat |
-| **Stok otomatis** | Terpotong saat transaksi berhasil, sesuai resep masing-masing produk |
-| **Diskon & Pajak** | Belum aktif (saat ini Rp 0) |
+| **Format Export** | `.xlsx` (Microsoft Excel / Google Sheets) |
+| **Diskon & Pajak** | Tampil di struk namun belum aktif (Rp 0) |
 
 ---
 

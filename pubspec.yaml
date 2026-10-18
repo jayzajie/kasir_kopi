@@ -40,6 +40,10 @@ dependencies:
   sqflite: ^2.4.2
   sqflite_common_ffi: ^2.3.6
   file_selector: ^1.1.0
+  excel: ^4.0.6
+  path_provider: ^2.1.5
+  share_plus: ^10.1.4
+  image: ^4.3.0
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +68,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/coffee.png
+    - logo_karsa.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

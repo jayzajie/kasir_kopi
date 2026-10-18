@@ -4,6 +4,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:image/image.dart' as img;
 
 import '../core/currency.dart';
 import '../models/cart_item.dart';
@@ -18,6 +20,7 @@ class ReceiptPrinter {
     required String customerName,
     required DateTime transactionTime,
     required List<CartItem> items,
+    int orderNumber = 0,
   }) async {
     final selected = PrinterManager.instance.selectedPrinter;
     final rawWindows = defaultTargetPlatform == TargetPlatform.windows;
@@ -25,6 +28,9 @@ class ReceiptPrinter {
         defaultTargetPlatform == TargetPlatform.android &&
         selected?.url.startsWith('bt://') == true;
     if (selected != null && (rawWindows || rawBluetooth)) {
+      final logo = (await rootBundle.load(
+        'logo_karsa.png',
+      )).buffer.asUint8List();
       await PrinterManager.instance.rawPrint(
         printerName: selected.url.replaceFirst('bt://', ''),
         documentName: 'Struk $transactionNumber',
@@ -34,6 +40,8 @@ class ReceiptPrinter {
           customerName: customerName,
           transactionTime: transactionTime,
           items: items,
+          orderNumber: orderNumber,
+          logoBytes: logo,
         ),
       );
       return;
@@ -46,6 +54,7 @@ class ReceiptPrinter {
       customerName: customerName,
       transactionTime: transactionTime,
       items: items,
+      orderNumber: orderNumber,
     );
     if (selected != null) {
       await Printing.directPrintPdf(
@@ -70,8 +79,10 @@ class ReceiptPrinter {
     required String customerName,
     required DateTime transactionTime,
     required List<CartItem> items,
+    int orderNumber = 0,
   }) async {
     final total = items.fold<int>(0, (sum, item) => sum + item.total);
+    final logo = (await rootBundle.load('logo_karsa.png')).buffer.asUint8List();
     const page = PdfPageFormat.roll80;
     final date = _dateTime(transactionTime);
     final regular = pw.TextStyle(fontSize: 9);
@@ -98,23 +109,36 @@ class ReceiptPrinter {
           build: (_) => pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: [
-              pw.Text(
-                'KOPI KITA',
-                textAlign: pw.TextAlign.center,
-                style: pw.TextStyle(
-                  fontSize: 20,
-                  fontWeight: pw.FontWeight.bold,
-                  letterSpacing: 2,
+              // ── Nomor order besar di pojok kanan atas ──────────────────────
+              if (orderNumber > 0)
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.end,
+                  children: [
+                    pw.Container(
+                      padding: const pw.EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(),
+                        borderRadius: pw.BorderRadius.circular(4),
+                      ),
+                      child: pw.Text(
+                        'Order #$orderNumber',
+                        style: pw.TextStyle(
+                          fontSize: 11,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              pw.Text(
-                'COFFEE SHOP',
-                textAlign: pw.TextAlign.center,
-                style: pw.TextStyle(fontSize: 9, letterSpacing: 1),
-              ),
+              pw.SizedBox(height: orderNumber > 0 ? 4 : 0),
+              // ── Header toko ────────────────────────────────────────────────
+              pw.Center(child: pw.Image(pw.MemoryImage(logo), width: 150)),
               pw.SizedBox(height: 3),
               pw.Text(
-                'Jl. Kopi Nikmat No. 17',
+                'Jl. Aminah Syukur Gg. Mulia',
                 textAlign: pw.TextAlign.center,
                 style: small,
               ),
@@ -240,11 +264,6 @@ class ReceiptPrinter {
                 textAlign: pw.TextAlign.center,
                 style: small,
               ),
-              pw.Text(
-                'Instagram: @kopikita',
-                textAlign: pw.TextAlign.center,
-                style: small,
-              ),
               pw.SizedBox(height: 10),
               pw.Text(
                 '--- POTONG DI SINI ---',
@@ -270,6 +289,8 @@ class ReceiptPrinter {
     required String customerName,
     required DateTime transactionTime,
     required List<CartItem> items,
+    int orderNumber = 0,
+    Uint8List? logoBytes,
   }) {
     const width = 32;
     final bytes = BytesBuilder();
@@ -304,16 +325,25 @@ class ReceiptPrinter {
     }
 
     final total = items.fold<int>(0, (sum, item) => sum + item.total);
-    command([0x1b, 0x40]);
-    command([0x1b, 0x61, 1]);
-    command([0x1b, 0x45, 1]);
-    command([0x1d, 0x21, 0x11]);
-    text('KOPI KITA\n');
-    command([0x1d, 0x21, 0]);
-    command([0x1b, 0x45, 0]);
-    text('COFFEE SHOP\n');
-    text('Jl. Kopi Nikmat No. 17\n');
-    command([0x1b, 0x61, 0]);
+    command([0x1b, 0x40]); // init
+    // ── Nomor order — besar, center ─────────────────────────────────────────
+    if (orderNumber > 0) {
+      command([0x1b, 0x61, 1]); // center
+      command([0x1b, 0x45, 1]); // bold on
+      command([0x1d, 0x21, 0x11]); // double width+height
+      text('Order #$orderNumber\n');
+      command([0x1d, 0x21, 0]); // normal size
+      command([0x1b, 0x45, 0]); // bold off
+      text('${'-' * width}\n');
+    }
+    // ── Header toko ──────────────────────────────────────────────────────────
+    command([0x1b, 0x61, 1]); // center
+    if (logoBytes != null) {
+      command(_rasterLogo(logoBytes));
+      text('\n');
+    }
+    text('Jl. Aminah Syukur Gg. Mulia\n');
+    command([0x1b, 0x61, 0]); // left
     text('${'-' * width}\n');
     wrapped('No: $transactionNumber');
     text('Tanggal : ${_dateTime(transactionTime)}\n');
@@ -347,9 +377,41 @@ class ReceiptPrinter {
     wrapped('Terima kasih, $customerName!');
     command([0x1b, 0x45, 0]);
     text('Selamat menikmati kopi Anda.\n');
-    text('@kopikita\n');
     command([0x1b, 0x64, 4]);
     command([0x1d, 0x56, 1]);
     return bytes.toBytes();
+  }
+
+  List<int> _rasterLogo(Uint8List bytes) {
+    final source = img.decodeImage(bytes);
+    if (source == null) return const [];
+    final logo = img.copyResize(source, width: 320);
+    final widthBytes = (logo.width + 7) ~/ 8;
+    final data = <int>[];
+    for (var y = 0; y < logo.height; y++) {
+      for (var xByte = 0; xByte < widthBytes; xByte++) {
+        var value = 0;
+        for (var bit = 0; bit < 8; bit++) {
+          final x = xByte * 8 + bit;
+          if (x >= logo.width) continue;
+          final pixel = logo.getPixel(x, y);
+          final luminance =
+              (299 * pixel.r + 587 * pixel.g + 114 * pixel.b) / 1000;
+          if (pixel.a > 127 && luminance < 160) value |= 0x80 >> bit;
+        }
+        data.add(value);
+      }
+    }
+    return [
+      0x1d,
+      0x76,
+      0x30,
+      0,
+      widthBytes & 0xff,
+      widthBytes >> 8,
+      logo.height & 0xff,
+      logo.height >> 8,
+      ...data,
+    ];
   }
 }

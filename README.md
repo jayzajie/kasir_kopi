@@ -1,4 +1,4 @@
-# Kopi Kita POS
+# Kedai Kopi Karsa.co POS
 
 Aplikasi kasir coffee shop berbasis Flutter. Target utama Android/iOS, dengan
 target Windows untuk pengujian lokal.
