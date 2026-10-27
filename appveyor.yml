@@ -9,7 +9,7 @@ environment:
   PATH: C:\flutter_sdk\bin;C:\Program Files (x86)\Inno Setup 6;$(PATH)
 
 install:
-  - ps: choco install innosetup --no-progress
+  - cmd: choco install innosetup -y --no-progress
   - cmd: git clone -b stable --depth 1 https://github.com/flutter/flutter.git C:\flutter_sdk
   - cmd: flutter config --enable-windows-desktop
   - cmd: flutter doctor -v
