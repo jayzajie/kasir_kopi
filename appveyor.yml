@@ -9,13 +9,9 @@ environment:
   PATH: C:\flutter\bin;C:\Program Files (x86)\Inno Setup 6;$(PATH)
 
 install:
-  - ps: choco install innosetup --no-progress
-  - cmd: |
-      if exist C:\flutter (
-        cd C:\flutter && git fetch --depth 1 origin stable && git checkout stable && git reset --hard origin/stable && cd %APPVEYOR_BUILD_FOLDER%
-      ) else (
-        git clone -b stable --depth 1 https://github.com/flutter/flutter.git C:\flutter
-      )
+  - ps: |
+      choco install innosetup --no-progress
+      cmd.exe /c "cd /d C:\flutter && git fetch --depth 1 origin stable && git checkout stable && git reset --hard origin/stable"
   - cmd: flutter config --enable-windows-desktop
   - cmd: flutter doctor -v
 
