@@ -5,19 +5,29 @@ branches:
   only:
     - main
 
+environment:
+  PATH: C:\flutter\bin;C:\Program Files (x86)\Inno Setup 6;$(PATH)
+
 install:
   - ps: choco install innosetup --no-progress
-  - cmd: git clone -b stable --depth 1 https://github.com/flutter/flutter.git C:\flutter
-  - cmd: set PATH=C:\flutter\bin;%PATH%
+  - ps: |
+      if (Test-Path "C:\flutter") {
+        Write-Host "Updating existing Flutter to latest stable..."
+        git -C C:\flutter fetch --depth 1 origin stable
+        git -C C:\flutter checkout stable
+        git -C C:\flutter reset --hard origin/stable
+      } else {
+        Write-Host "Cloning Flutter stable..."
+        git clone -b stable --depth 1 https://github.com/flutter/flutter.git C:\flutter
+      }
   - cmd: flutter config --enable-windows-desktop
   - cmd: flutter doctor -v
 
 build_script:
-  - cmd: set PATH=C:\flutter\bin;%PATH%
   - cmd: flutter pub get
   - cmd: flutter test test/pos_controller_test.dart test/receipt_printer_test.dart
   - cmd: flutter build windows --release
-  - cmd: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" windows_installer.iss'
+  - cmd: ISCC.exe windows_installer.iss
 
 artifacts:
   - path: installer_output\KopiKita_POS_Setup.exe
