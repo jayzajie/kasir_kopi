@@ -1,0 +1,24 @@
+version: 1.0.{build}
+image: Visual Studio 2022
+
+branches:
+  only:
+    - main
+
+install:
+  - ps: choco install innosetup --no-progress
+  - cmd: git clone -b stable --depth 1 https://github.com/flutter/flutter.git C:\flutter
+  - cmd: set PATH=C:\flutter\bin;%PATH%
+  - cmd: flutter config --enable-windows-desktop
+  - cmd: flutter doctor -v
+
+build_script:
+  - cmd: set PATH=C:\flutter\bin;%PATH%
+  - cmd: flutter pub get
+  - cmd: flutter test test/pos_controller_test.dart test/receipt_printer_test.dart
+  - cmd: flutter build windows --release
+  - cmd: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" windows_installer.iss'
+
+artifacts:
+  - path: installer_output\KopiKita_POS_Setup.exe
+    name: KopiKita_POS_Setup
