@@ -62,21 +62,18 @@ Halaman utama untuk melayani pelanggan dan membuat pesanan.
    - Semua · Kopi · Non Kopi · Makanan · Add-on
 3. Tap produk untuk menambahkan ke keranjang
 
-### Kustomisasi Menu Kopi
+### Kustomisasi Menu Minuman
 
-Khusus produk berkategori **Kopi**, muncul halaman kustomisasi sebelum masuk ke keranjang:
+Khusus produk minuman (**Kopi** & **Non Kopi**), muncul halaman kustomisasi sebelum masuk ke keranjang (seluruh minuman disajikan dingin/ice):
 
 | Opsi | Pilihan |
 |---|---|
-| Suhu | Panas / Dingin |
-| Ukuran | Small (−Rp 2.000) · Medium · Large (+Rp 4.000) |
 | Tingkat Es | Normal Ice / Less Ice |
 | Tingkat Gula | Normal Sugar / Less Sugar |
-| Sirup | Caramel / Vanilla / Gula Aren |
-| Add-on | Sesuai yang diatur per produk (misal: Extra Shot, Extra Susu) |
+| Add-on | Sesuai yang diatur per produk (misal: Extra Shot, Extra Susu, Topping) |
 | Catatan | Teks bebas, maksimal 100 karakter |
 
-> Pilihan size dan add-on otomatis mengubah harga akhir item.
+> Pilihan add-on otomatis mengubah harga akhir item.
 
 ---
 
@@ -136,8 +133,8 @@ Isi form:
 - Nama dan kategori (Kopi / Non Kopi / Makanan / Add-on)
 - Harga jual
 - Foto produk (dari galeri/file, maks. 5 MB)
-- Default es dan gula *(khusus kategori Kopi)*
-- **Add-on** eksklusif produk (nama + harga, bisa lebih dari satu) *(khusus kategori Kopi)*
+- Default es dan gula *(khusus kategori Kopi & Non Kopi)*
+- **Add-on** eksklusif produk (nama + harga, bisa lebih dari satu, opsional) *(untuk kategori Kopi, Non Kopi, dan Makanan)*
 
 ### Kelola Menu yang Ada
 

@@ -13,7 +13,7 @@ class ProductAddon {
       ProductAddon(map['name'] as String, (map['price'] as num).round());
 }
 
-const kDefaultSyrups = ['Caramel', 'Vanilla', 'Gula Aren'];
+const kDefaultSyrups = <String>[];
 
 class Product {
   Product(
@@ -27,7 +27,7 @@ class Product {
     this.image,
     this.addons = const [],
     List<String>? syrups,
-  }) : syrups = syrups ?? List.of(kDefaultSyrups);
+  }) : syrups = syrups ?? const [];
 
   final int id;
   String name;
@@ -38,7 +38,6 @@ class Product {
   String sugarOption;
   Uint8List? image;
   List<ProductAddon> addons;
-  /// Daftar pilihan syrup yang muncul di halaman kustomisasi kopi.
   List<String> syrups;
 
   String get addonsJson =>
@@ -52,7 +51,7 @@ class Product {
     if (syrupsRaw != null && syrupsRaw.isNotEmpty) {
       syrups = (jsonDecode(syrupsRaw) as List).cast<String>();
     } else {
-      syrups = List.of(kDefaultSyrups);
+      syrups = const [];
     }
     return Product(
       map['name'] as String,

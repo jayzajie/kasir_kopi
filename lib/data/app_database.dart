@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -24,9 +26,30 @@ class AppDatabase {
         : desktop
         ? databaseFactoryFfi
         : sqflite.databaseFactory;
+
+    String dbDirectory = '';
+    if (!inMemory) {
+      if (desktop) {
+        try {
+          final supportDir = await getApplicationSupportDirectory();
+          dbDirectory = supportDir.path;
+          await Directory(dbDirectory).create(recursive: true);
+          final oldPath = p.join(await factory.getDatabasesPath(), 'kopi_kita.db');
+          final newPath = p.join(dbDirectory, 'kopi_kita.db');
+          if (File(oldPath).existsSync() && !File(newPath).existsSync()) {
+            await File(oldPath).copy(newPath);
+          }
+        } catch (_) {
+          dbDirectory = await factory.getDatabasesPath();
+        }
+      } else {
+        dbDirectory = await factory.getDatabasesPath();
+      }
+    }
+
     final path = inMemory
         ? inMemoryDatabasePath
-        : p.join(await factory.getDatabasesPath(), 'kopi_kita.db');
+        : p.join(dbDirectory, 'kopi_kita.db');
     db = await factory.openDatabase(
       path,
       options: OpenDatabaseOptions(

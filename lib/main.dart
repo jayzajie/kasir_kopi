@@ -15,9 +15,28 @@ import 'services/printer_manager.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final database = AppDatabase();
-  await database.initialize();
-  runApp(KopiKitaApp(database: database));
+  try {
+    final database = AppDatabase();
+    await database.initialize();
+    runApp(KopiKitaApp(database: database));
+  } catch (error, stack) {
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.white,
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: SelectableText(
+                'Gagal memulai aplikasi:\n$error\n\n$stack',
+                style: const TextStyle(color: Colors.red, fontSize: 14),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 const brown = Color(0xff4b2a17);
@@ -161,7 +180,10 @@ class PosShellState extends State<PosShell> {
 
   Future<void> add(Product p) async {
     if (!p.available) return;
-    final item = p.category == 'Kopi'
+    final needsCustomization = p.category == 'Kopi' ||
+        p.category == 'Non Kopi' ||
+        (p.category == 'Makanan' && p.addons.isNotEmpty);
+    final item = needsCustomization
         ? await Navigator.push<CartItem>(
             context,
             MaterialPageRoute(builder: (_) => CustomizePage(p)),
@@ -1136,29 +1158,22 @@ class CustomizePage extends StatefulWidget {
 
 class _CustomizePageState extends State<CustomizePage> {
   int qty = 1;
-  String temp = 'Dingin', size = 'Medium';
-  late String ice, sugar, syrup;
+  late String ice, sugar;
   late final List<int> addonQuantities;
   final note = TextEditingController();
+
+  bool get isDrink =>
+      widget.product.category == 'Kopi' || widget.product.category == 'Non Kopi';
 
   @override
   void initState() {
     super.initState();
     ice = widget.product.iceOption;
     sugar = widget.product.sugarOption;
-    // Syrup default: pilihan pertama dari daftar produk, atau kosong jika tidak ada
-    final syrupList = widget.product.syrups;
-    syrup = syrupList.isNotEmpty ? syrupList.first : '';
     addonQuantities = List.filled(widget.product.addons.length, 0);
   }
 
-  int get extra =>
-      (size == 'Large'
-          ? 4000
-          : size == 'Small'
-          ? -2000
-          : 0) +
-      widget.product.addons.indexed.fold(
+  int get extra => widget.product.addons.indexed.fold(
         0,
         (sum, entry) => sum + addonQuantities[entry.$1] * entry.$2.price,
       );
@@ -1199,7 +1214,10 @@ class _CustomizePageState extends State<CustomizePage> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const Text('Perpaduan espresso dan susu segar.'),
+                  Text(
+                    widget.product.category,
+                    style: TextStyle(color: Colors.grey.shade600),
+                  ),
                   Text(
                     rp(widget.product.price),
                     style: const TextStyle(
@@ -1216,41 +1234,35 @@ class _CustomizePageState extends State<CustomizePage> {
       ),
     );
 
-    final mainOptions = [
-      Options(
-        'Panas / Dingin',
-        ['Panas', 'Dingin'],
-        temp,
-        (v) => setState(() => temp = v),
-      ),
-      Options(
-        'Ukuran',
-        ['Small', 'Medium', 'Large'],
-        size,
-        (v) => setState(() => size = v),
-      ),
-      Options(
-        'Es',
-        ['Normal Ice', 'Less Ice'],
-        ice,
-        (value) => setState(() => ice = value),
-      ),
-      Options(
-        'Gula',
-        ['Normal Sugar', 'Less Sugar'],
-        sugar,
-        (value) => setState(() => sugar = value),
-      ),
-      if (widget.product.syrups.isNotEmpty)
-        Pick(
-          'Syrup',
-          syrup.isNotEmpty ? syrup : widget.product.syrups.first,
-          widget.product.syrups,
-          (v) => setState(() => syrup = v),
-        ),
-    ];
+    final mainOptions = isDrink
+        ? [
+            Options(
+              'Es',
+              ['Normal Ice', 'Less Ice'],
+              ice,
+              (value) => setState(() => ice = value),
+            ),
+            Options(
+              'Gula',
+              ['Normal Sugar', 'Less Sugar'],
+              sugar,
+              (value) => setState(() => sugar = value),
+            ),
+          ]
+        : const <Widget>[];
 
     final addonsAndSubmit = [
+      if (widget.product.addons.isNotEmpty)
+        const Padding(
+          padding: EdgeInsets.symmetric(vertical: 6),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Pilihan Add-on (Opsional)',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ),
       ...widget.product.addons.indexed.map(
         (entry) => Card(
           child: ListTile(
@@ -1268,26 +1280,36 @@ class _CustomizePageState extends State<CustomizePage> {
       TextField(
         controller: note,
         maxLength: 100,
-        decoration: const InputDecoration(
+        decoration: InputDecoration(
           labelText: 'Catatan Pesanan (Opsional)',
-          hintText: 'Less ice, please',
+          hintText: isDrink
+              ? 'Contoh: Less ice'
+              : 'Contoh: Jangan terlalu pedas, saus dipisah',
         ),
       ),
       const SizedBox(height: 8),
       SizedBox(
         width: double.infinity,
         child: FilledButton.icon(
-          onPressed: () => Navigator.pop(
-            context,
-            CartItem(
-              widget.product,
-              qty: qty,
-              extra: extra,
-              note: note.text,
-              options:
-                  '$temp • $size • $ice • $sugar${syrup.isNotEmpty ? ' • $syrup' : ''}${selectedAddons.isEmpty ? '' : ' • $selectedAddons'}',
-            ),
-          ),
+          onPressed: () {
+            final optionParts = <String>[];
+            if (isDrink) {
+              optionParts.addAll([ice, sugar]);
+            }
+            if (selectedAddons.isNotEmpty) {
+              optionParts.add(selectedAddons);
+            }
+            Navigator.pop(
+              context,
+              CartItem(
+                widget.product,
+                qty: qty,
+                extra: extra,
+                note: note.text,
+                options: optionParts.join(' • '),
+              ),
+            );
+          },
           icon: const Icon(Icons.shopping_cart_outlined),
           label: Text(
             'Tambah ke Keranjang • ${rp((widget.product.price + extra) * qty)}',
@@ -1297,33 +1319,31 @@ class _CustomizePageState extends State<CustomizePage> {
     ];
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Custom Kopi')),
+      appBar: AppBar(
+        title: Text(isDrink ? 'Custom Minuman' : 'Custom Menu'),
+      ),
       body: ResponsiveCenter(
         maxWidth: wide ? 1020 : 680,
-        child: wide
-            ? ListView(
-                padding: const EdgeInsets.all(18),
+        child: ListView(
+          padding: EdgeInsets.all(wide ? 18 : 14),
+          children: [
+            productCard,
+            const SizedBox(height: 8),
+            if (wide && mainOptions.isNotEmpty)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  productCard,
-                  const SizedBox(height: 8),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: Column(children: mainOptions)),
-                      const SizedBox(width: 14),
-                      Expanded(child: Column(children: addonsAndSubmit)),
-                    ],
-                  ),
+                  Expanded(child: Column(children: mainOptions)),
+                  const SizedBox(width: 14),
+                  Expanded(child: Column(children: addonsAndSubmit)),
                 ],
               )
-            : ListView(
-                padding: const EdgeInsets.all(14),
-                children: [
-                  productCard,
-                  ...mainOptions,
-                  ...addonsAndSubmit,
-                ],
-              ),
+            else ...[
+              ...mainOptions,
+              ...addonsAndSubmit,
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -1355,26 +1375,6 @@ class Options extends StatelessWidget {
                 .toList(),
           ),
         ],
-      ),
-    ),
-  );
-}
-
-class Pick extends StatelessWidget {
-  const Pick(this.title, this.value, this.items, this.changed, {super.key});
-  final String title, value;
-  final List<String> items;
-  final ValueChanged<String> changed;
-  @override
-  Widget build(BuildContext context) => Card(
-    child: ListTile(
-      title: Text(title),
-      trailing: DropdownButton(
-        value: value,
-        items: items
-            .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-            .toList(),
-        onChanged: (v) => changed(v!),
       ),
     ),
   );
@@ -2006,9 +2006,12 @@ class _ProductDialogState extends State<_ProductDialog> {
   late final TextEditingController name;
   late final TextEditingController price;
   final addons = <_AddonInput>[];
-  final syrups = <TextEditingController>[];
   late String category, iceOption, sugarOption;
   Uint8List? image;
+
+  bool get isDrink => category == 'Kopi' || category == 'Non Kopi';
+  bool get canHaveAddons =>
+      category == 'Kopi' || category == 'Non Kopi' || category == 'Makanan';
 
   @override
   void initState() {
@@ -2021,8 +2024,6 @@ class _ProductDialogState extends State<_ProductDialog> {
     sugarOption = product?.sugarOption ?? 'Normal Sugar';
     image = product?.image;
     addons.addAll(product?.addons.map(_AddonInput.fromProduct) ?? []);
-    final syrupList = product?.syrups ?? kDefaultSyrups;
-    syrups.addAll(syrupList.map((s) => TextEditingController(text: s)));
   }
 
   @override
@@ -2031,9 +2032,6 @@ class _ProductDialogState extends State<_ProductDialog> {
     price.dispose();
     for (final addon in addons) {
       addon.dispose();
-    }
-    for (final s in syrups) {
-      s.dispose();
     }
     super.dispose();
   }
@@ -2093,8 +2091,9 @@ class _ProductDialogState extends State<_ProductDialog> {
         iceOption: iceOption,
         sugarOption: sugarOption,
         image: image,
-        addons: category == 'Kopi'
+        addons: canHaveAddons
             ? addons
+                  .where((addon) => addon.name.text.trim().isNotEmpty)
                   .map(
                     (addon) => ProductAddon(
                       addon.name.text.trim(),
@@ -2103,12 +2102,7 @@ class _ProductDialogState extends State<_ProductDialog> {
                   )
                   .toList()
             : const [],
-        syrups: category == 'Kopi'
-            ? syrups
-                  .map((c) => c.text.trim())
-                  .where((s) => s.isNotEmpty)
-                  .toList()
-            : const [],
+        syrups: const [],
       ),
     );
   }
@@ -2177,7 +2171,7 @@ class _ProductDialogState extends State<_ProductDialog> {
                     ),
                 ],
               ),
-              if (category == 'Kopi') ...[
+              if (isDrink) ...[
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: iceOption,
@@ -2204,7 +2198,17 @@ class _ProductDialogState extends State<_ProductDialog> {
                       .toList(),
                   onChanged: (value) => setState(() => sugarOption = value!),
                 ),
-                const SizedBox(height: 12),
+              ],
+              if (canHaveAddons) ...[
+                const SizedBox(height: 16),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    'Pilihan Add-on (Opsional)',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                const SizedBox(height: 8),
                 ...addons.indexed.map(
                   (entry) => Padding(
                     padding: const EdgeInsets.only(bottom: 12),
@@ -2243,62 +2247,6 @@ class _ProductDialogState extends State<_ProductDialog> {
                     onPressed: addAddon,
                     icon: const Icon(Icons.add),
                     label: const Text('Tambah Add-on'),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                // ── Daftar Syrup ───────────────────────────────────────────────
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Pilihan Syrup',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                ...syrups.indexed.map(
-                  (entry) => Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: entry.$2,
-                            textCapitalization: TextCapitalization.words,
-                            decoration: InputDecoration(
-                              labelText: 'Syrup ${entry.$1 + 1}',
-                              isDense: true,
-                            ),
-                            validator: (v) =>
-                                v == null || v.trim().isEmpty
-                                ? 'Wajib diisi'
-                                : null,
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: syrups.length > 1
-                              ? () {
-                                  final removed = syrups.removeAt(entry.$1);
-                                  setState(() {});
-                                  WidgetsBinding.instance.addPostFrameCallback(
-                                    (_) => removed.dispose(),
-                                  );
-                                }
-                              : null,
-                          tooltip: 'Hapus syrup',
-                          icon: const Icon(Icons.delete_outline),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
-                    onPressed: () => setState(
-                      () => syrups.add(TextEditingController()),
-                    ),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Tambah Syrup'),
                   ),
                 ),
               ],
