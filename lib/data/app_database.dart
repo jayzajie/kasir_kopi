@@ -53,7 +53,7 @@ class AppDatabase {
     db = await factory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 10,
+        version: 11,
         onCreate: _create,
         onUpgrade: _upgrade,
       ),
@@ -152,6 +152,12 @@ class AppDatabase {
         'ALTER TABLE sales ADD COLUMN daily_number INTEGER NOT NULL DEFAULT 0',
       ).catchError((_) async => 0);
     }
+    // v11: tambah kolom order_type ke sales
+    if (oldVersion < 11) {
+      await database.execute(
+        "ALTER TABLE sales ADD COLUMN order_type TEXT NOT NULL DEFAULT 'Dine In'",
+      ).catchError((_) async => 0);
+    }
   }
 
   Future<void> close() => db.close();
@@ -176,6 +182,7 @@ class AppDatabase {
       transaction_number TEXT NOT NULL UNIQUE,
       customer_name TEXT NOT NULL,
       payment_method TEXT NOT NULL,
+      order_type TEXT NOT NULL DEFAULT 'Dine In',
       total INTEGER NOT NULL,
       status INTEGER NOT NULL DEFAULT 0,
       daily_number INTEGER NOT NULL DEFAULT 0,
@@ -276,6 +283,7 @@ class AppDatabase {
     required DateTime createdAt,
     required List<CartItem> items,
     required int dailyNumber,
+    String orderType = 'Dine In',
   }) async {
     return db.transaction((txn) async {
       final total = items.fold<int>(0, (sum, item) => sum + item.total);
@@ -283,6 +291,7 @@ class AppDatabase {
         'transaction_number': transactionNumber,
         'customer_name': customerName,
         'payment_method': paymentMethod,
+        'order_type': orderType,
         'total': total,
         'daily_number': dailyNumber,
         'created_at': createdAt.toIso8601String(),
@@ -443,6 +452,26 @@ class AppDatabase {
       [start, end],
     );
   }
+
+  // ── Settings ──────────────────────────────────────────────────────────────
+
+  Future<String?> getSetting(String key) async {
+    final rows = await db.query(
+      'settings',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: [key],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return rows.first['value'] as String?;
+  }
+
+  Future<void> setSetting(String key, String value) => db.insert(
+    'settings',
+    {'key': key, 'value': value},
+    conflictAlgorithm: sqflite.ConflictAlgorithm.replace,
+  );
 
   // ── Reset ─────────────────────────────────────────────────────────────────
 

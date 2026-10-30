@@ -9,6 +9,8 @@ import 'data/app_database.dart';
 import 'models/accounting.dart';
 import 'models/cart_item.dart';
 import 'models/product.dart';
+import 'models/receipt_settings.dart';
+import 'screens/receipt_settings_page.dart';
 import 'services/excel_exporter.dart';
 import 'services/receipt_printer.dart';
 import 'services/printer_manager.dart';
@@ -18,6 +20,7 @@ Future<void> main() async {
   try {
     final database = AppDatabase();
     await database.initialize();
+    await ReceiptSettings.load(database);
     runApp(KopiKitaApp(database: database));
   } catch (error, stack) {
     runApp(
@@ -205,6 +208,7 @@ class PosShellState extends State<PosShell> {
         transactionTime: controller.transactionTime,
         items: receipt,
         orderNumber: orderNumber,
+        orderType: controller.receiptOrderType,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -972,23 +976,50 @@ class _TabletCartPanel extends StatelessWidget {
           else ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
-              child: Form(
-                key: formKey,
-                child: TextFormField(
-                  key: ValueKey(shell.trx),
-                  initialValue: shell.controller.customerName,
-                  textCapitalization: TextCapitalization.words,
-                  onChanged: (value) => shell.controller.customerName = value,
-                  validator: (value) => value == null || value.trim().isEmpty
-                      ? 'Nama pembeli wajib diisi'
-                      : null,
-                  decoration: const InputDecoration(
-                    labelText: 'Nama Pembeli *',
-                    hintText: 'Contoh: Budi Santoso',
-                    prefixIcon: Icon(Icons.person_outline),
-                    isDense: true,
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(
+                          value: 'Dine In',
+                          label: Text('Dine In'),
+                          icon: Icon(Icons.restaurant_outlined, size: 16),
+                        ),
+                        ButtonSegment(
+                          value: 'Take Away',
+                          label: Text('Take Away'),
+                          icon: Icon(Icons.takeout_dining_outlined, size: 16),
+                        ),
+                      ],
+                      selected: {shell.controller.orderType},
+                      onSelectionChanged: (set) {
+                        shell.controller.orderType = set.first;
+                        onChanged();
+                      },
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  Form(
+                    key: formKey,
+                    child: TextFormField(
+                      key: ValueKey(shell.trx),
+                      initialValue: shell.controller.customerName,
+                      textCapitalization: TextCapitalization.words,
+                      onChanged: (value) => shell.controller.customerName = value,
+                      validator: (value) => value == null || value.trim().isEmpty
+                          ? 'Nama pembeli wajib diisi'
+                          : null,
+                      decoration: const InputDecoration(
+                        labelText: 'Nama Pembeli *',
+                        hintText: 'Contoh: Budi Santoso',
+                        prefixIcon: Icon(Icons.person_outline),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
             Expanded(
@@ -1181,7 +1212,7 @@ class _CustomizePageState extends State<CustomizePage> {
   String get selectedAddons => widget.product.addons.indexed
       .where((entry) => addonQuantities[entry.$1] > 0)
       .map((entry) => '${addonQuantities[entry.$1]} ${entry.$2.name}')
-      .join(' • ');
+      .join(', ');
 
   @override
   void dispose() {
@@ -1306,7 +1337,7 @@ class _CustomizePageState extends State<CustomizePage> {
                 qty: qty,
                 extra: extra,
                 note: note.text,
-                options: optionParts.join(' • '),
+                options: optionParts.join(', '),
               ),
             );
           },
@@ -1407,22 +1438,47 @@ class _CartPageState extends State<CartPage> {
                     Card(
                       child: Padding(
                         padding: const EdgeInsets.all(16),
-                        child: TextFormField(
-                          initialValue: s.controller.customerName,
-                          textCapitalization: TextCapitalization.words,
-                          maxLength: 50,
-                          onChanged: (value) =>
-                              s.controller.customerName = value,
-                          validator: (value) =>
-                              value == null || value.trim().isEmpty
-                              ? 'Nama pembeli wajib diisi'
-                              : null,
-                          decoration: const InputDecoration(
-                            labelText: 'Nama Pembeli *',
-                            hintText: 'Contoh: Budi Santoso',
-                            prefixIcon: Icon(Icons.person_outline),
-                            helperText: 'Nama akan dicetak pada struk',
-                          ),
+                        child: Column(
+                          children: [
+                            SizedBox(
+                              width: double.infinity,
+                              child: SegmentedButton<String>(
+                                segments: const [
+                                  ButtonSegment(
+                                    value: 'Dine In',
+                                    label: Text('Dine In'),
+                                    icon: Icon(Icons.restaurant_outlined, size: 16),
+                                  ),
+                                  ButtonSegment(
+                                    value: 'Take Away',
+                                    label: Text('Take Away'),
+                                    icon: Icon(Icons.takeout_dining_outlined, size: 16),
+                                  ),
+                                ],
+                                selected: {s.controller.orderType},
+                                onSelectionChanged: (set) =>
+                                    setState(() => s.controller.orderType = set.first),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              initialValue: s.controller.customerName,
+                              textCapitalization: TextCapitalization.words,
+                              maxLength: 50,
+                              onChanged: (value) =>
+                                  s.controller.customerName = value,
+                              validator: (value) =>
+                                  value == null || value.trim().isEmpty
+                                  ? 'Nama pembeli wajib diisi'
+                                  : null,
+                              decoration: const InputDecoration(
+                                labelText: 'Nama Pembeli *',
+                                hintText: 'Contoh: Budi Santoso',
+                                prefixIcon: Icon(Icons.person_outline),
+                                helperText: 'Nama akan dicetak pada struk',
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -1909,7 +1965,7 @@ class Orders extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${rp(orders[i].total)} • ${orders[i].number}',
+                    '${rp(orders[i].total)} • ${orders[i].number} • ${orders[i].orderType}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -2472,11 +2528,36 @@ class _MoreState extends State<More> {
             child: ListTile(
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (_) => const PrinterSettingsPage()),
+                MaterialPageRoute(
+                  builder: (_) => PrinterSettingsPage(
+                    database: widget.controller.database,
+                  ),
+                ),
               ),
               leading: const Icon(Icons.print_outlined),
               title: const Text('Pengaturan Printer'),
               subtitle: const Text('Deteksi, pilih, dan pairing USB/Bluetooth'),
+              trailing: const Icon(Icons.chevron_right),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          child: Card(
+            child: ListTile(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => ReceiptSettingsPage(
+                    database: widget.controller.database,
+                  ),
+                ),
+              ),
+              leading: const Icon(Icons.receipt_long_outlined),
+              title: const Text('Layout & Format Struk'),
+              subtitle: const Text(
+                'Kustomisasi alamat, sosmed, logo, dan live preview',
+              ),
               trailing: const Icon(Icons.chevron_right),
             ),
           ),
@@ -2523,7 +2604,8 @@ class _MoreState extends State<More> {
 }
 
 class PrinterSettingsPage extends StatefulWidget {
-  const PrinterSettingsPage({super.key});
+  const PrinterSettingsPage({super.key, this.database});
+  final AppDatabase? database;
   @override
   State<PrinterSettingsPage> createState() => _PrinterSettingsPageState();
 }
@@ -2569,7 +2651,22 @@ class _PrinterSettingsPageState extends State<PrinterSettingsPage> {
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Pengaturan Printer')),
+    appBar: AppBar(
+      title: const Text('Pengaturan Printer'),
+      actions: [
+        if (widget.database != null)
+          TextButton.icon(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ReceiptSettingsPage(database: widget.database!),
+              ),
+            ),
+            icon: const Icon(Icons.receipt_long, color: brown),
+            label: const Text('Layout Struk', style: TextStyle(color: brown)),
+          ),
+      ],
+    ),
     body: ResponsiveCenter(
       maxWidth: 760,
       child: RefreshIndicator(

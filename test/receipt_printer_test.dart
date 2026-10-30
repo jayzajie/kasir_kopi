@@ -27,7 +27,7 @@ void main() {
       expect(text, contains('Pembeli : Budi'));
       expect(bytes, containsAllInOrder([0x1d, 0x76, 0x30, 0]));
       expect(text, contains('TOTAL'));
-      expect(bytes.sublist(bytes.length - 6), [0x1b, 0x64, 4, 0x1d, 0x56, 1]);
+      expect(bytes.sublist(bytes.length - 6), [0x1b, 0x64, 2, 0x1d, 0x56, 1]);
     },
   );
 

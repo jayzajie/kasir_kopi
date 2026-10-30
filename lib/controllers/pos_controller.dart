@@ -2,6 +2,7 @@ import '../data/app_database.dart';
 import '../models/cart_item.dart';
 import '../models/accounting.dart';
 import '../models/product.dart';
+import '../models/receipt_settings.dart';
 
 class OrderRecord {
   OrderRecord.fromMap(Map<String, Object?> map)
@@ -10,12 +11,13 @@ class OrderRecord {
       dailyNumber = (map['daily_number'] as int?) ?? 0,
       customer = map['customer_name'] as String,
       paymentMethod = map['payment_method'] as String,
+      orderType = (map['order_type'] as String?) ?? 'Dine In',
       total = map['total'] as int,
       status = map['status'] as int,
       createdAt = DateTime.parse(map['created_at'] as String);
 
   final int id, total, dailyNumber;
-  final String number, customer, paymentMethod;
+  final String number, customer, paymentMethod, orderType;
   final DateTime createdAt;
   int status;
 }
@@ -37,12 +39,15 @@ class PosController {
   int receiptDailyNumber = 0;
   String customerName = '';
   String receiptCustomerName = 'Pelanggan';
+  String orderType = 'Dine In';
+  String receiptOrderType = 'Dine In';
   DateTime transactionTime = DateTime.now();
 
   int get total => cart.fold(0, (sum, item) => sum + item.total);
 
   Future<void> load() async {
     products = await database.products();
+    await ReceiptSettings.load(database);
     await refreshData();
   }
 
@@ -125,6 +130,7 @@ class PosController {
     receiptCustomerName = customerName.trim().isEmpty
         ? 'Pelanggan'
         : customerName.trim();
+    receiptOrderType = orderType;
     transactionTime = DateTime.now();
     receiptDailyNumber = await database.nextDailyNumber();
     final timestamp = [
@@ -143,6 +149,7 @@ class PosController {
       createdAt: transactionTime,
       items: receipt,
       dailyNumber: receiptDailyNumber,
+      orderType: receiptOrderType,
     );
     await refreshData();
   }
@@ -150,6 +157,7 @@ class PosController {
   void newTransaction() {
     cart.clear();
     customerName = '';
+    orderType = 'Dine In';
   }
 
   Future<void> resetDatabase() async {
@@ -159,6 +167,8 @@ class PosController {
     receipt.clear();
     customerName = '';
     receiptCustomerName = 'Pelanggan';
+    orderType = 'Dine In';
+    receiptOrderType = 'Dine In';
     receiptDailyNumber = 0;
     transactionNumber = '';
     await refreshData();
