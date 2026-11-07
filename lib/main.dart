@@ -1848,22 +1848,103 @@ class _PaymentPageState extends State<PaymentPage> {
               padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  const Icon(Icons.qr_code_2, size: 140, color: brown),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Pindai QRIS Kedai Kopi Karsa.co',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  GestureDetector(
+                    onTap: () {
+                      showDialog(
+                        context: context,
+                        builder: (_) => Dialog(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Image.asset(
+                                  'assets/qris_dana.png',
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (context, error, stackTrace) => const Icon(
+                                    Icons.qr_code_2,
+                                    size: 260,
+                                    color: brown,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Total Tagihan: ${rp(total)}',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: brown,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Tutup'),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xffeadfd2)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.04),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        children: [
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.asset(
+                              'assets/qris_dana.png',
+                              height: 200,
+                              fit: BoxFit.contain,
+                              errorBuilder: (context, error, stackTrace) => const Icon(
+                                Icons.qr_code_2,
+                                size: 140,
+                                color: brown,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.zoom_in, size: 14, color: Colors.grey),
+                              SizedBox(width: 4),
+                              Text(
+                                'Ketuk untuk memperbesar QR',
+                                style: TextStyle(fontSize: 11, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 10),
                   Text(
-                    'Total: ${rp(total)}',
+                    'Total Tagihan: ${rp(total)}',
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 19,
                       fontWeight: FontWeight.bold,
                       color: brown,
                     ),
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(

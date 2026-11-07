@@ -27,6 +27,12 @@ class DanaWebhookService {
   DanaWebhookService._();
   static final DanaWebhookService instance = DanaWebhookService._();
 
+  /// Data QRIS DANA Bisnis Merchant
+  static const String merchantName = 'Jayzie.Dev';
+  static const String nmid = 'ID1025452810423';
+  static const String qrisPayload =
+      '00020101021126570011ID.DANA.WWW011893600915300923823102090092382310303UMI51440014ID.CO.QRIS.WWW0215ID10254528104230303UMI5204737253033605802ID5910Jayzie.Dev600454916105741156304FB27';
+
   HttpServer? _server;
   int _port = 8080;
   List<String> _localIps = [];

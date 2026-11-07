@@ -71,6 +71,8 @@ flutter:
     - assets/instagram.png
     - assets/tiktok.png
     - assets/social_karsa.png
+    - assets/qris_dana.png
+    - assets/qris_code_only.png
     - logo_karsa.png
 
   # To add assets to your application, add an assets section, like this:
