@@ -92,7 +92,7 @@ Pilih metode pembayaran:
 | Metode | Detail |
 |---|---|
 | **Tunai** | Input nominal diterima → kembalian dihitung otomatis. Tombol cepat: Rp 50.000 / 100.000 / 150.000 / 200.000 |
-| **QRIS** | Konfirmasi langsung |
+| **QRIS** | Menunggu validasi otomatis notifikasi DANA via Local Webhook (port 8080) atau konfirmasi manual kasir |
 
 Setelah **Bayar Sekarang**:
 - Transaksi tersimpan ke database

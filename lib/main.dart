@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_selector/file_selector.dart';
@@ -10,7 +11,9 @@ import 'models/accounting.dart';
 import 'models/cart_item.dart';
 import 'models/product.dart';
 import 'models/receipt_settings.dart';
+import 'screens/dana_webhook_page.dart';
 import 'screens/receipt_settings_page.dart';
+import 'services/dana_webhook_service.dart';
 import 'services/excel_exporter.dart';
 import 'services/receipt_printer.dart';
 import 'services/printer_manager.dart';
@@ -21,6 +24,7 @@ Future<void> main() async {
     final database = AppDatabase();
     await database.initialize();
     await ReceiptSettings.load(database);
+    await DanaWebhookService.instance.startServer();
     runApp(KopiKitaApp(database: database));
   } catch (error, stack) {
     runApp(
@@ -1622,6 +1626,98 @@ class PaymentPage extends StatefulWidget {
 class _PaymentPageState extends State<PaymentPage> {
   String method = 'Tunai';
   int cash = 0;
+  StreamSubscription<DanaPaymentNotification>? _danaSub;
+  bool _isAutoProcessing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _danaSub = DanaWebhookService.instance.onPaymentReceived.listen(_handleDanaNotification);
+  }
+
+  @override
+  void dispose() {
+    _danaSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _handleDanaNotification(DanaPaymentNotification notif) async {
+    if (!mounted || _isAutoProcessing) return;
+    if (method != 'QRIS') return;
+
+    final total = widget.shell.total;
+    if (notif.amount == total) {
+      setState(() => _isAutoProcessing = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.green.shade800,
+          duration: const Duration(seconds: 3),
+          content: Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Validasi Berhasil: DANA ${rp(notif.amount)} diterima!',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      await widget.shell.paid('QRIS DANA');
+      await widget.shell.printReceipt();
+      if (mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => SuccessPage(widget.shell)),
+          (r) => r.isFirst,
+        );
+      }
+    } else {
+      // Nominal berbeda
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Nominal Berbeda'),
+            ],
+          ),
+          content: Text(
+            'Notifikasi DANA masuk sebesar ${rp(notif.amount)}, tetapi total tagihan adalah ${rp(total)}.\n\nApakah transaksi ini ingin disetujui & dilunaskan?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Abaikan'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                Navigator.pop(ctx);
+                setState(() => _isAutoProcessing = true);
+                await widget.shell.paid('QRIS DANA (${rp(notif.amount)})');
+                await widget.shell.printReceipt();
+                if (mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => SuccessPage(widget.shell)),
+                    (r) => r.isFirst,
+                  );
+                }
+              },
+              child: const Text('Terima & Lunaskan'),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final total = widget.shell.total;
@@ -1747,23 +1843,92 @@ class _PaymentPageState extends State<PaymentPage> {
             ),
           ),
         if (method == 'QRIS')
-          const Card(
+          Card(
             child: Padding(
-              padding: EdgeInsets.all(24),
+              padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  Icon(Icons.qr_code_2, size: 150),
-                  Text('Pindai QRIS Kedai Kopi Karsa.co'),
+                  const Icon(Icons.qr_code_2, size: 140, color: brown),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Pindai QRIS Kedai Kopi Karsa.co',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Total: ${rp(total)}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: brown,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green),
+                        ),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            'Menunggu notifikasi pembayaran DANA (${rp(total)})...',
+                            style: const TextStyle(
+                              color: Colors.green,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () {
+                          DanaWebhookService.instance.simulatePayment(total);
+                        },
+                        icon: const Icon(Icons.play_circle_outline, size: 16),
+                        label: const Text('Uji Simulasi Bayar', style: TextStyle(fontSize: 12)),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const DanaWebhookPage(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.settings_outlined, size: 16),
+                        label: const Text('Pengaturan Webhook', style: TextStyle(fontSize: 12)),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
           ),
         const SizedBox(height: 14),
         FilledButton(
-          onPressed: method == 'Tunai' && cash < total
+          onPressed: (method == 'Tunai' && cash < total) || _isAutoProcessing
               ? null
               : () async {
-                  await widget.shell.paid(method);
+                  await widget.shell.paid(method == 'QRIS' ? 'QRIS (Manual)' : method);
                   await widget.shell.printReceipt();
                   if (context.mounted) {
                     Navigator.pushAndRemoveUntil(
@@ -1775,7 +1940,9 @@ class _PaymentPageState extends State<PaymentPage> {
                     );
                   }
                 },
-          child: const Text('Bayar Sekarang'),
+          child: Text(
+            method == 'QRIS' ? 'Konfirmasi Manual (Bayar Sekarang)' : 'Bayar Sekarang',
+          ),
         ),
       ],
     );
@@ -2557,6 +2724,25 @@ class _MoreState extends State<More> {
               title: const Text('Layout & Format Struk'),
               subtitle: const Text(
                 'Kustomisasi alamat, sosmed, logo, dan live preview',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+            ),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+          child: Card(
+            child: ListTile(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const DanaWebhookPage(),
+                ),
+              ),
+              leading: const Icon(Icons.qr_code_scanner),
+              title: const Text('Integrasi QRIS DANA (Webhook)'),
+              subtitle: const Text(
+                'Status server lokal, tes notifikasi & panduan MacroDroid',
               ),
               trailing: const Icon(Icons.chevron_right),
             ),
