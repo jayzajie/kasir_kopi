@@ -31,7 +31,7 @@ class ReceiptPrinter {
     if (selected == null) {
       try {
         final printers = await Printing.listPrinters();
-        final defaultPrinter = printers.where((p) => p.isDefault).firstOrNull ?? printers.firstOrNull;
+        final defaultPrinter = _selectBestPrinter(printers);
         if (defaultPrinter != null) {
           selected = defaultPrinter;
           PrinterManager.instance.selectedPrinter = defaultPrinter;
@@ -39,10 +39,11 @@ class ReceiptPrinter {
       } catch (_) {}
     }
 
+    final rawWindows = defaultTargetPlatform == TargetPlatform.windows;
     final rawBluetooth =
         defaultTargetPlatform == TargetPlatform.android &&
         selected?.url.startsWith('bt://') == true;
-    if (selected != null && rawBluetooth) {
+    if (selected != null && (rawWindows || rawBluetooth)) {
       Uint8List? logo;
       try {
         logo = (await rootBundle.load('logo_karsa.png')).buffer.asUint8List();
@@ -54,7 +55,9 @@ class ReceiptPrinter {
       } catch (_) {}
 
       await PrinterManager.instance.rawPrint(
-        printerName: selected.url.replaceFirst('bt://', ''),
+        printerName: rawBluetooth
+            ? selected.url.replaceFirst('bt://', '')
+            : selected.name,
         documentName: 'Struk $transactionNumber',
         data: buildEscPos(
           transactionNumber: transactionNumber,
@@ -77,9 +80,12 @@ class ReceiptPrinter {
         selected?.model?.toLowerCase().contains('58') == true;
     final rollWidth = is58 ? 136.0 : (72.0 * PdfPageFormat.mm);
     final contentHeightMm = _calculateHeightMm(s, items, orderNumber);
-    final pageHeightPt = contentHeightMm <= 205.0
-        ? 595.0
-        : (contentHeightMm <= 290.0 ? 842.0 : contentHeightMm * PdfPageFormat.mm);
+    final isMac = defaultTargetPlatform == TargetPlatform.macOS;
+    final pageHeightPt = isMac
+        ? (contentHeightMm <= 205.0
+            ? 595.0
+            : (contentHeightMm <= 290.0 ? 842.0 : contentHeightMm * PdfPageFormat.mm))
+        : contentHeightMm * PdfPageFormat.mm;
     final page = PdfPageFormat(
       rollWidth,
       pageHeightPt,
@@ -144,9 +150,12 @@ class ReceiptPrinter {
     final effectiveIs58 = s.paperWidth == 58 || is58;
     final rollWidth = effectiveIs58 ? 136.0 : (72.0 * PdfPageFormat.mm);
     final contentHeightMm = _calculateHeightMm(s, items, orderNumber);
-    final pageHeightPt = contentHeightMm <= 205.0
-        ? 595.0
-        : (contentHeightMm <= 290.0 ? 842.0 : contentHeightMm * PdfPageFormat.mm);
+    final isMac = defaultTargetPlatform == TargetPlatform.macOS;
+    final pageHeightPt = isMac
+        ? (contentHeightMm <= 205.0
+            ? 595.0
+            : (contentHeightMm <= 290.0 ? 842.0 : contentHeightMm * PdfPageFormat.mm))
+        : contentHeightMm * PdfPageFormat.mm;
     final page = pageFormat ??
         PdfPageFormat(
           rollWidth,
@@ -619,6 +628,41 @@ class ReceiptPrinter {
     return bytes.toBytes();
   }
 
+  Printer? _selectBestPrinter(List<Printer> printers) {
+    if (printers.isEmpty) return null;
+    bool isVirtual(Printer p) {
+      final n = '${p.name} ${p.model ?? ''}'.toLowerCase();
+      return n.contains('print to pdf') ||
+          n.contains('xps') ||
+          n.contains('onenote') ||
+          n.contains('fax');
+    }
+
+    bool isThermal(Printer p) {
+      final n = '${p.name} ${p.model ?? ''}'.toLowerCase();
+      return n.contains('pos') ||
+          n.contains('58') ||
+          n.contains('80') ||
+          n.contains('iware') ||
+          n.contains('thermal') ||
+          n.contains('xprinter') ||
+          n.contains('epson') ||
+          n.contains('rpp');
+    }
+
+    final defaultThermal =
+        printers.where((p) => p.isDefault && isThermal(p)).firstOrNull;
+    if (defaultThermal != null) return defaultThermal;
+    final anyThermal = printers.where(isThermal).firstOrNull;
+    if (anyThermal != null) return anyThermal;
+    final defaultReal =
+        printers.where((p) => p.isDefault && !isVirtual(p)).firstOrNull;
+    if (defaultReal != null) return defaultReal;
+    return printers.where((p) => !isVirtual(p)).firstOrNull ??
+        printers.where((p) => p.isDefault).firstOrNull ??
+        printers.firstOrNull;
+  }
+
   List<int> _rasterLogo(Uint8List bytes) {
     final source = img.decodeImage(bytes);
     if (source == null) return const [];
@@ -627,8 +671,12 @@ class ReceiptPrinter {
         ? source
         : img.copyResize(source, width: targetWidth);
     final widthBytes = (logo.width + 7) ~/ 8;
-    final data = <int>[];
+    final rows = <List<int>>[];
+    int firstNonEmpty = -1;
+    int lastNonEmpty = -1;
     for (var y = 0; y < logo.height; y++) {
+      final row = List<int>.filled(widthBytes, 0);
+      var hasBlack = false;
       for (var xByte = 0; xByte < widthBytes; xByte++) {
         var value = 0;
         for (var bit = 0; bit < 8; bit++) {
@@ -639,19 +687,35 @@ class ReceiptPrinter {
               (299 * pixel.r + 587 * pixel.g + 114 * pixel.b) / 1000;
           if (pixel.a > 127 && luminance < 160) value |= 0x80 >> bit;
         }
-        data.add(value);
+        if (value != 0) hasBlack = true;
+        row[xByte] = value;
+      }
+      if (hasBlack) {
+        if (firstNonEmpty == -1) firstNonEmpty = y;
+        lastNonEmpty = y;
+      }
+      rows.add(row);
+    }
+    if (firstNonEmpty == -1) return const [];
+    final cropped = rows.sublist(firstNonEmpty, lastNonEmpty + 1);
+    const bandSize = 24;
+    final out = <int>[];
+    for (var offset = 0; offset < cropped.length; offset += bandSize) {
+      final bandHeight = math.min(bandSize, cropped.length - offset);
+      out.addAll([
+        0x1d,
+        0x76,
+        0x30,
+        0,
+        widthBytes & 0xff,
+        widthBytes >> 8,
+        bandHeight & 0xff,
+        bandHeight >> 8,
+      ]);
+      for (var r = 0; r < bandHeight; r++) {
+        out.addAll(cropped[offset + r]);
       }
     }
-    return [
-      0x1d,
-      0x76,
-      0x30,
-      0,
-      widthBytes & 0xff,
-      widthBytes >> 8,
-      logo.height & 0xff,
-      logo.height >> 8,
-      ...data,
-    ];
+    return out;
   }
 }
