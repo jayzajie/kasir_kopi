@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_selector/file_selector.dart';
@@ -17,6 +18,31 @@ import 'services/dana_webhook_service.dart';
 import 'services/excel_exporter.dart';
 import 'services/receipt_printer.dart';
 import 'services/printer_manager.dart';
+
+void playCashierPaymentSound({String? spokenMessage}) {
+  try {
+    if (Platform.isMacOS) {
+      // 1. Bunyikan nada lonceng kasir di macOS
+      Process.run('afplay', ['/System/Library/Sounds/Hero.aiff']);
+
+      // 2. Ucapkan suara dalam bahasa Indonesia (suara native Damayanti di Mac)
+      if (spokenMessage != null && spokenMessage.isNotEmpty) {
+        Process.run('say', ['-v', 'Damayanti', spokenMessage]);
+      }
+    } else if (Platform.isWindows) {
+      // 1 & 2. Bunyikan chime & ucapkan teks menggunakan SAPI bawaan Windows
+      final safeMsg = (spokenMessage ?? '').replaceAll("'", '');
+      final psCommand = safeMsg.isNotEmpty
+          ? "[console]::beep(1000,250); Add-Type -AssemblyName System.Speech; \$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; \$s.Speak('$safeMsg')"
+          : "[console]::beep(1000,250)";
+      Process.run('powershell', ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', psCommand]);
+    } else {
+      SystemSound.play(SystemSoundType.alert);
+    }
+  } catch (_) {
+    SystemSound.play(SystemSoundType.alert);
+  }
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -201,6 +227,9 @@ class PosShellState extends State<PosShell> {
 
   Future<void> paid(String method) async {
     await controller.finishPayment(method);
+    if (!method.contains('QRIS DANA')) {
+      playCashierPaymentSound();
+    }
   }
 
   Future<void> printReceipt() async {
@@ -1643,11 +1672,16 @@ class _PaymentPageState extends State<PaymentPage> {
 
   Future<void> _handleDanaNotification(DanaPaymentNotification notif) async {
     if (!mounted || _isAutoProcessing) return;
-    if (method != 'QRIS') return;
+    if (method != 'QRIS') {
+      setState(() => method = 'QRIS');
+    }
 
     final total = widget.shell.total;
     if (notif.amount == total) {
       setState(() => _isAutoProcessing = true);
+      playCashierPaymentSound(
+        spokenMessage: 'Pembayaran DANA sebesar ${rp(notif.amount)} berhasil diterima',
+      );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           backgroundColor: Colors.green.shade800,
@@ -1700,6 +1734,9 @@ class _PaymentPageState extends State<PaymentPage> {
               onPressed: () async {
                 Navigator.pop(ctx);
                 setState(() => _isAutoProcessing = true);
+                playCashierPaymentSound(
+                  spokenMessage: 'Pembayaran DANA sebesar ${rp(notif.amount)} berhasil diterima',
+                );
                 await widget.shell.paid('QRIS DANA (${rp(notif.amount)})');
                 await widget.shell.printReceipt();
                 if (mounted) {

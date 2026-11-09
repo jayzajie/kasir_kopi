@@ -75,11 +75,14 @@ class ReceiptPrinter {
     final is58 = s.paperWidth == 58 ||
         selected?.name.toLowerCase().contains('58') == true ||
         selected?.model?.toLowerCase().contains('58') == true;
-    final rollWidth = (is58 ? 48.0 : 72.0) * PdfPageFormat.mm;
-    final estimatedHeight = _calculateHeightMm(s, items, orderNumber) * PdfPageFormat.mm;
+    final rollWidth = is58 ? 136.0 : (72.0 * PdfPageFormat.mm);
+    final contentHeightMm = _calculateHeightMm(s, items, orderNumber);
+    final pageHeightPt = contentHeightMm <= 205.0
+        ? 595.0
+        : (contentHeightMm <= 290.0 ? 842.0 : contentHeightMm * PdfPageFormat.mm);
     final page = PdfPageFormat(
       rollWidth,
-      estimatedHeight,
+      pageHeightPt,
       marginAll: 0,
     );
 
@@ -139,12 +142,15 @@ class ReceiptPrinter {
     } catch (_) {}
 
     final effectiveIs58 = s.paperWidth == 58 || is58;
-    final rollWidth = (effectiveIs58 ? 48.0 : 72.0) * PdfPageFormat.mm;
-    final estimatedHeight = _calculateHeightMm(s, items, orderNumber) * PdfPageFormat.mm;
+    final rollWidth = effectiveIs58 ? 136.0 : (72.0 * PdfPageFormat.mm);
+    final contentHeightMm = _calculateHeightMm(s, items, orderNumber);
+    final pageHeightPt = contentHeightMm <= 205.0
+        ? 595.0
+        : (contentHeightMm <= 290.0 ? 842.0 : contentHeightMm * PdfPageFormat.mm);
     final page = pageFormat ??
         PdfPageFormat(
           rollWidth,
-          estimatedHeight,
+          pageHeightPt,
           marginAll: 0,
         );
     final date = _dateTime(transactionTime);
@@ -348,11 +354,14 @@ class ReceiptPrinter {
       ..addPage(
         pw.Page(
           pageFormat: page,
-          margin: pw.EdgeInsets.symmetric(
-            horizontal: effectiveIs58 ? 2 : 6,
-            vertical: 2,
+          margin: pw.EdgeInsets.only(
+            left: effectiveIs58 ? 2 : 6,
+            right: effectiveIs58 ? 2 : 6,
+            top: 0,
+            bottom: 0,
           ),
           build: (_) => pw.Column(
+            mainAxisSize: pw.MainAxisSize.min,
             crossAxisAlignment: pw.CrossAxisAlignment.stretch,
             children: widgets,
           ),
