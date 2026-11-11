@@ -244,13 +244,14 @@ class _DanaWebhookPageState extends State<DanaWebhookPage> {
                 ),
                 _buildGuideStep(
                   step: '3',
-                  title: 'Buat Macro Baru di MacroDroid',
+                  title: 'Buat Macro Khusus DANA Bisnis di MacroDroid',
                   desc: '• Trigger: Notifikasi Diterima -> Pilih aplikasi DANA.\n'
-                      '• Tindakan (Action): Buka Situs / Permintaan HTTP (HTTP Request):\n'
+                      '  - Filter Pesan: Pilih "Kecocokan" + Centang "Ekspresi Reguler"\n'
+                      '  - Regex: (?i).*((menerima|diterima|qris|bisnis|karsa).*rp\\s*[0-9]|rp\\s*[0-9].*(menerima|diterima|qris|bisnis|karsa)).*\n'
+                      '• Tindakan (Action): Permintaan HTTP (HTTP Request):\n'
                       '    - Metode: POST\n'
                       '    - URL: $primaryUrl\n'
-                      '    - Header: Content-Type: application/json\n'
-                      '    - Body Konten: {"raw": "[not_message]"}',
+                      '    - Body Konten: {notification}',
                 ),
                 _buildGuideStep(
                   step: '4',

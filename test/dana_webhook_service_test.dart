@@ -26,6 +26,44 @@ void main() {
       expect(DanaWebhookService.parseAmount(''), isNull);
       expect(DanaWebhookService.parseAmount('Halo dunia'), isNull);
     });
+
+    test('isDanaBisnisPaymentNotification accepts DANA Bisnis QRIS and rejects promos', () {
+      expect(
+        DanaWebhookService.isDanaBisnisPaymentNotification(
+          'Kamu telah menerima Rp15.000 dari pembayaran QRIS.',
+          title: 'DANA Bisnis',
+        ),
+        isTrue,
+      );
+      expect(
+        DanaWebhookService.isDanaBisnisPaymentNotification(
+          'Kamu menerima pembayaran sebesar Rp 28.000 dari Ahmad',
+          title: 'DANA',
+        ),
+        isTrue,
+      );
+      expect(
+        DanaWebhookService.isDanaBisnisPaymentNotification(
+          'HARI TERAKHIR⏰ Serbu promo cuma Rp11 buat semuanya di DANA 11.11',
+          title: 'DANA',
+        ),
+        isFalse,
+      );
+      expect(
+        DanaWebhookService.isDanaBisnisPaymentNotification(
+          '💎Serbu 5.000 Diamond buat klaim GRATIS Saldo DANA. Cek VIP Pass yuk!',
+          title: 'DANA',
+        ),
+        isFalse,
+      );
+      expect(
+        DanaWebhookService.isDanaBisnisPaymentNotification(
+          'HARI INI🔥 Klaim Samsung Z Fold 8 Ultra & iPhone 18 Pro Max di DANA 11.11!',
+          title: 'DANA',
+        ),
+        isFalse,
+      );
+    });
   });
 
   group('DanaWebhookService HTTP Server Tests', () {
