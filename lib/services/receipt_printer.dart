@@ -39,11 +39,73 @@ class ReceiptPrinter {
       } catch (_) {}
     }
 
+    final is58 = s.paperWidth == 58 ||
+        selected?.name.toLowerCase().contains('58') == true ||
+        selected?.model?.toLowerCase().contains('58') == true;
+    final rollWidth = is58 ? 136.0 : (72.0 * PdfPageFormat.mm);
+    final contentHeightMm = _calculateHeightMm(s, items, orderNumber);
+    final isMac = defaultTargetPlatform == TargetPlatform.macOS;
+    final pageHeightPt = isMac
+        ? (contentHeightMm <= 205.0
+            ? 595.0
+            : (contentHeightMm <= 290.0 ? 842.0 : contentHeightMm * PdfPageFormat.mm))
+        : (contentHeightMm + 40.0) * PdfPageFormat.mm;
+    final page = PdfPageFormat(
+      rollWidth,
+      pageHeightPt,
+      marginAll: 0,
+    );
+
     final rawWindows = defaultTargetPlatform == TargetPlatform.windows;
     final rawBluetooth =
         defaultTargetPlatform == TargetPlatform.android &&
         selected?.url.startsWith('bt://') == true;
     if (selected != null && (rawWindows || rawBluetooth)) {
+      final printerName = rawBluetooth
+          ? selected.url.replaceFirst('bt://', '')
+          : selected.name;
+      try {
+        final pdfBytes = await buildPdf(
+          transactionNumber: transactionNumber,
+          paymentMethod: paymentMethod,
+          customerName: customerName,
+          transactionTime: transactionTime,
+          items: items,
+          orderNumber: orderNumber,
+          orderType: orderType,
+          pageFormat: page,
+          is58: is58,
+          settings: s,
+        );
+        final targetDots = is58 ? 384.2 : 576.2;
+        final rasterDpi = (targetDots / rollWidth) * PdfPageFormat.inch;
+        final pages = await Printing.raster(pdfBytes, dpi: rasterDpi).toList();
+        if (pages.isNotEmpty) {
+          final rawData = BytesBuilder();
+          rawData.add(const [0x1b, 0x40]); // init
+          rawData.add(const [0x1b, 0x61, 1]); // center
+          for (final rasterPage in pages) {
+            rawData.add(
+              _rasterRgbaBands(
+                rasterPage.pixels,
+                rasterPage.width,
+                rasterPage.height,
+              ),
+            );
+          }
+          rawData.add(const [0x1b, 0x64, 3]); // feed 3 lines
+          rawData.add(const [0x1d, 0x56, 1]); // cut
+          await PrinterManager.instance.rawPrint(
+            printerName: printerName,
+            documentName: 'Struk $transactionNumber',
+            data: rawData.toBytes(),
+          );
+          return;
+        }
+      } catch (_) {
+        // Fallback to text-mode ESC/POS if PDF rasterization fails
+      }
+
       Uint8List? logo;
       try {
         logo = (await rootBundle.load('logo_karsa.png')).buffer.asUint8List();
@@ -55,9 +117,7 @@ class ReceiptPrinter {
       } catch (_) {}
 
       await PrinterManager.instance.rawPrint(
-        printerName: rawBluetooth
-            ? selected.url.replaceFirst('bt://', '')
-            : selected.name,
+        printerName: printerName,
         documentName: 'Struk $transactionNumber',
         data: buildEscPos(
           transactionNumber: transactionNumber,
@@ -74,23 +134,6 @@ class ReceiptPrinter {
       );
       return;
     }
-
-    final is58 = s.paperWidth == 58 ||
-        selected?.name.toLowerCase().contains('58') == true ||
-        selected?.model?.toLowerCase().contains('58') == true;
-    final rollWidth = is58 ? 136.0 : (72.0 * PdfPageFormat.mm);
-    final contentHeightMm = _calculateHeightMm(s, items, orderNumber);
-    final isMac = defaultTargetPlatform == TargetPlatform.macOS;
-    final pageHeightPt = isMac
-        ? (contentHeightMm <= 205.0
-            ? 595.0
-            : (contentHeightMm <= 290.0 ? 842.0 : contentHeightMm * PdfPageFormat.mm))
-        : contentHeightMm * PdfPageFormat.mm;
-    final page = PdfPageFormat(
-      rollWidth,
-      pageHeightPt,
-      marginAll: 0,
-    );
 
     Future<Uint8List> onLayout(PdfPageFormat _) => buildPdf(
       transactionNumber: transactionNumber,
@@ -155,7 +198,7 @@ class ReceiptPrinter {
         ? (contentHeightMm <= 205.0
             ? 595.0
             : (contentHeightMm <= 290.0 ? 842.0 : contentHeightMm * PdfPageFormat.mm))
-        : contentHeightMm * PdfPageFormat.mm;
+        : (contentHeightMm + 40.0) * PdfPageFormat.mm;
     final page = pageFormat ??
         PdfPageFormat(
           rollWidth,
@@ -163,8 +206,8 @@ class ReceiptPrinter {
           marginAll: 0,
         );
     final date = _dateTime(transactionTime);
-    final regular = pw.TextStyle(fontSize: effectiveIs58 ? 8 : 9);
-    final small = pw.TextStyle(fontSize: effectiveIs58 ? 7 : 7.5, color: PdfColors.grey800);
+    final regular = pw.TextStyle(fontSize: effectiveIs58 ? 8 : 9, color: PdfColors.black);
+    final small = pw.TextStyle(fontSize: effectiveIs58 ? 7 : 7.5, color: PdfColors.black);
     pw.Widget line([double height = 1]) => pw.Container(
       margin: const pw.EdgeInsets.symmetric(vertical: 4),
       height: height,
@@ -696,6 +739,81 @@ class ReceiptPrinter {
       }
       rows.add(row);
     }
+    if (firstNonEmpty == -1) return const [];
+    final cropped = rows.sublist(firstNonEmpty, lastNonEmpty + 1);
+    const bandSize = 24;
+    final out = <int>[];
+    for (var offset = 0; offset < cropped.length; offset += bandSize) {
+      final bandHeight = math.min(bandSize, cropped.length - offset);
+      out.addAll([
+        0x1d,
+        0x76,
+        0x30,
+        0,
+        widthBytes & 0xff,
+        widthBytes >> 8,
+        bandHeight & 0xff,
+        bandHeight >> 8,
+      ]);
+      for (var r = 0; r < bandHeight; r++) {
+        out.addAll(cropped[offset + r]);
+      }
+    }
+    return out;
+  }
+
+  Uint8List buildEscPosFromRgba({
+    required Uint8List rgbaPixels,
+    required int width,
+    required int height,
+  }) {
+    final rawData = BytesBuilder();
+    rawData.add(const [0x1b, 0x40]); // init
+    rawData.add(const [0x1b, 0x61, 1]); // center
+    rawData.add(_rasterRgbaBands(rgbaPixels, width, height));
+    rawData.add(const [0x1b, 0x64, 3]); // feed 3 lines
+    rawData.add(const [0x1d, 0x56, 1]); // cut
+    return rawData.toBytes();
+  }
+
+  List<int> _rasterRgbaBands(Uint8List rgba, int width, int height) {
+    if (width <= 0 || height <= 0 || rgba.length < width * height * 4) {
+      return const [];
+    }
+    final widthBytes = (width + 7) ~/ 8;
+    final rows = <List<int>>[];
+    int firstNonEmpty = -1;
+    int lastNonEmpty = -1;
+
+    for (var y = 0; y < height; y++) {
+      final row = List<int>.filled(widthBytes, 0);
+      var hasBlack = false;
+      final rowOffset = y * width * 4;
+      for (var xByte = 0; xByte < widthBytes; xByte++) {
+        var value = 0;
+        for (var bit = 0; bit < 8; bit++) {
+          final x = xByte * 8 + bit;
+          if (x >= width) continue;
+          final idx = rowOffset + x * 4;
+          final a = rgba[idx + 3];
+          final r = (rgba[idx] * a + 255 * (255 - a)) ~/ 255;
+          final g = (rgba[idx + 1] * a + 255 * (255 - a)) ~/ 255;
+          final b = (rgba[idx + 2] * a + 255 * (255 - a)) ~/ 255;
+          final luminance = (299 * r + 587 * g + 114 * b) ~/ 1000;
+          if (luminance < 185) {
+            value |= 0x80 >> bit;
+          }
+        }
+        if (value != 0) hasBlack = true;
+        row[xByte] = value;
+      }
+      if (hasBlack) {
+        if (firstNonEmpty == -1) firstNonEmpty = y;
+        lastNonEmpty = y;
+      }
+      rows.add(row);
+    }
+
     if (firstNonEmpty == -1) return const [];
     final cropped = rows.sublist(firstNonEmpty, lastNonEmpty + 1);
     const bandSize = 24;
